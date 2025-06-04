@@ -1,0 +1,23 @@
+name: rl
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11.1
+  - ale-py
+  - gymnasium-all
+  - numpy
+  - opencv
+  - tensorboard
+  - pytorch
+  - pytorch-cuda=12.1
+  - torchvision
+  - tqdm
+  - einops
+  - matplotlib
+  - pandas
+  - pip
+  - pip:
+      - autorom # and then run: AutoROM --accept-license --install-dir "$(pip show ale-py | grep -i '^Location:' | cut -d' ' -f2-)/ale_py/roms"
