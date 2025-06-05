@@ -34,6 +34,7 @@ def play_episode(env, policy):
         action = policy(obs)
         obs_next, reward, terminated, truncated, _ = env.step(action)
         episode.step(obs, action, reward)
-        obs = obs_next
         if terminated or truncated:
             return episode
+
+        obs = obs_next

@@ -5,8 +5,8 @@ import torch
 from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 
-from lib.playground import Episode, batched_episodes, play_episode
-from lib.tracking import writer_add_params
+from src.lib.playground import batched_episodes, play_episode
+from src.lib.tracking import writer_add_params
 
 ENV = 'CartPole-v1'
 ENV_SOLVED_REWARD = 500
