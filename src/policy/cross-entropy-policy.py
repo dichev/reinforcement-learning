@@ -29,8 +29,8 @@ class CartPoleConfig(DefaultConfig):
     BATCH_SIZE = 16
     LEARN_RATE = .01
 
-# cfg = CartPoleConfig
-cfg = FrozenLakeConfig
+cfg = CartPoleConfig
+# cfg = FrozenLakeConfig
 
 
 class Agent(nn.Module):
@@ -84,8 +84,8 @@ if __name__ == '__main__':
             elite, _ = filter_episodes(elite + elite_preserved)
             elite_preserved = elite = elite[:cfg.BATCH_SIZE]
 
-        obs = torch.tensor(np.vstack([obs for episode in elite for obs in episode.observations]), dtype=torch.float)   # T, D
-        actions = torch.tensor([actions for episode in elite for actions in episode.actions], dtype=torch.long)        # T
+        obs = torch.cat([ep.observations for ep in elite])   # T, D
+        actions = torch.cat([ep.actions for ep in elite])    # T
 
         optimizer.zero_grad()
         z = agent(obs)
