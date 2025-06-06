@@ -1,3 +1,4 @@
+import random
 import gymnasium as gym
 import numpy as np
 import torch
@@ -5,8 +6,8 @@ import torch
 from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 
-from src.lib.playground import batched_episodes, play_episode
-from src.lib.tracking import writer_add_params
+from lib.playground import batched_episodes, play_episode
+from lib.tracking import writer_add_params
 
 ENV = 'CartPole-v1'
 ENV_SOLVED_REWARD = 500
@@ -30,6 +31,7 @@ class Agent(nn.Module):
     def forward(self, obs):
         return self.net(obs)
 
+    @torch.no_grad()
     def policy(self, state):
         z = self(torch.tensor(state, dtype=torch.float))
         p = torch.softmax(z, dim=-1)
@@ -39,10 +41,16 @@ class Agent(nn.Module):
 
 def filter_episodes(episodes, percentile=PERCENTILE):
     all_rewards = [ep.total_rewards for ep in episodes]
-    avg_rewards = np.mean(all_rewards)
     threshold = np.percentile(all_rewards, percentile)
     elite_episodes = list(filter(lambda ep: ep.total_rewards >= threshold, episodes))
-    return elite_episodes, avg_rewards, threshold
+    if not elite_episodes: # always return at least one episode
+        elite_episodes = [random.choice(episodes)]
+    details = {
+        "avg_rewards": np.mean(all_rewards),
+        "max_rewards": np.max(all_rewards),
+        "threshold": threshold,
+    }
+    return elite_episodes, details
 
 
 
@@ -54,9 +62,9 @@ if __name__ == '__main__':
     writer = SummaryWriter(comment=ENV)
 
     for i, batch in enumerate(batched_episodes(env, agent.policy, BATCH_SIZE)):
-        elite, avg_rewards, reward_threshold = filter_episodes(batch)
+        elite, details = filter_episodes(batch)
         obs = torch.tensor(np.vstack([obs for episode in elite for obs in episode.observations]), dtype=torch.float)   # T, D
-        actions = torch.tensor([actions for episode in elite for actions in episode.actions], dtype=torch.long)       # T
+        actions = torch.tensor([actions for episode in elite for actions in episode.actions], dtype=torch.long)        # T
 
         optimizer.zero_grad()
         z = agent(obs)
@@ -65,13 +73,13 @@ if __name__ == '__main__':
         optimizer.step()
 
         if i % LOG_STEP == 0:
-            print(f"#{i:>5}. loss={loss.item():.8f}, {avg_rewards=:.2f}, {reward_threshold=:.2f}, train_steps={len(actions)}")
+            print(f"#{i:>5}. loss={loss.item():.8f}, avg_rewards={details['avg_rewards']:.2f}, max_rewards={details['max_rewards']:.2f}, threshold={details['threshold']:.2f}, elite_episodes={len(elite)}/{len(batch)}, train_steps={len(actions)}")
             writer.add_scalar('t/Loss', loss, i)
-            writer.add_scalar('t/Rewards', avg_rewards, i)
-            writer.add_scalar('t/RewardsThreshold', reward_threshold, i)
+            writer.add_scalar('t/Rewards', details['avg_rewards'], i)
+            writer.add_scalar('t/RewardsThreshold', details['threshold'], i)
             writer_add_params(writer, agent, i)
 
-        if avg_rewards >= ENV_SOLVED_REWARD:
+        if details['avg_rewards'] >= ENV_SOLVED_REWARD:
             print(f"Solved in {i} iterations!")
             env.close()
             break
