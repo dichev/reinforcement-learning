@@ -8,14 +8,29 @@ from torch.utils.tensorboard import SummaryWriter
 
 from lib.playground import batched_episodes, play_episode
 from lib.tracking import writer_add_params
+import envs.custom_games
 
-ENV = 'CartPole-v1'
-ENV_SOLVED_REWARD = 500
-BATCH_SIZE = 16
-PERCENTILE = 70
-HIDDEN_SIZE = 128
-LEARN_RATE = .01
-LOG_STEP = 10
+class DefaultConfig:
+    PERCENTILE = 70
+    HIDDEN_SIZE = 128
+    LOG_STEP = 10
+
+class FrozenLakeConfig(DefaultConfig):
+    ENV = 'custom/FrozenLake-OneHot-StepPenalty'
+    ENV_SOLVED_REWARD = .95
+    PRESERVE_ELITE = True
+    BATCH_SIZE = 100
+    LEARN_RATE = .001
+
+class CartPoleConfig(DefaultConfig):
+    ENV = 'CartPole-v1'
+    ENV_SOLVED_REWARD = 500
+    PRESERVE_ELITE = True
+    BATCH_SIZE = 16
+    LEARN_RATE = .01
+
+# cfg = CartPoleConfig
+cfg = FrozenLakeConfig
 
 
 class Agent(nn.Module):
@@ -23,9 +38,9 @@ class Agent(nn.Module):
     def __init__(self, obs_size, n_actions):
         super(Agent, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_size, HIDDEN_SIZE),
+            nn.Linear(obs_size, cfg.HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, n_actions),
+            nn.Linear(cfg.HIDDEN_SIZE, n_actions),
         )
 
     def forward(self, obs):
@@ -39,12 +54,13 @@ class Agent(nn.Module):
         return actions
 
 
-def filter_episodes(episodes, percentile=PERCENTILE):
+def filter_episodes(episodes, percentile=cfg.PERCENTILE):
     all_rewards = [ep.total_rewards for ep in episodes]
     threshold = np.percentile(all_rewards, percentile)
-    elite_episodes = list(filter(lambda ep: ep.total_rewards >= threshold, episodes))
+    elite_episodes = list(filter(lambda ep: ep.total_rewards >= threshold and ep.total_rewards > 0, episodes))
     if not elite_episodes: # always return at least one episode
         elite_episodes = [random.choice(episodes)]
+
     details = {
         "avg_rewards": np.mean(all_rewards),
         "max_rewards": np.max(all_rewards),
@@ -55,14 +71,19 @@ def filter_episodes(episodes, percentile=PERCENTILE):
 
 
 if __name__ == '__main__':
-    env = gym.make(ENV, render_mode=None)
+    env = gym.make(cfg.ENV, render_mode=None)
     agent = Agent(env.observation_space.shape[0], env.action_space.n)
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(params=agent.net.parameters(), lr=LEARN_RATE)
-    writer = SummaryWriter(comment=ENV)
+    optimizer = optim.Adam(params=agent.net.parameters(), lr=cfg.LEARN_RATE)
+    writer = SummaryWriter(comment=cfg.ENV)
 
-    for i, batch in enumerate(batched_episodes(env, agent.policy, BATCH_SIZE)):
+    elite_preserved = []
+    for i, batch in enumerate(batched_episodes(env, agent.policy, cfg.BATCH_SIZE)):
         elite, details = filter_episodes(batch)
+        if cfg.PRESERVE_ELITE:
+            elite, _ = filter_episodes(elite + elite_preserved)
+            elite_preserved = elite = elite[:cfg.BATCH_SIZE]
+
         obs = torch.tensor(np.vstack([obs for episode in elite for obs in episode.observations]), dtype=torch.float)   # T, D
         actions = torch.tensor([actions for episode in elite for actions in episode.actions], dtype=torch.long)        # T
 
@@ -72,14 +93,14 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
 
-        if i % LOG_STEP == 0:
+        if i % cfg.LOG_STEP == 0:
             print(f"#{i:>5}. loss={loss.item():.8f}, avg_rewards={details['avg_rewards']:.2f}, max_rewards={details['max_rewards']:.2f}, threshold={details['threshold']:.2f}, elite_episodes={len(elite)}/{len(batch)}, train_steps={len(actions)}")
             writer.add_scalar('t/Loss', loss, i)
             writer.add_scalar('t/Rewards', details['avg_rewards'], i)
             writer.add_scalar('t/RewardsThreshold', details['threshold'], i)
             writer_add_params(writer, agent, i)
 
-        if details['avg_rewards'] >= ENV_SOLVED_REWARD:
+        if details['avg_rewards'] >= cfg.ENV_SOLVED_REWARD:
             print(f"Solved in {i} iterations!")
             env.close()
             break
@@ -87,7 +108,7 @@ if __name__ == '__main__':
 
     # Play one episode with visualization
     print(f"Playing one episode with the trained agent")
-    env = gym.make(ENV, render_mode='human')
+    env = gym.make(cfg.ENV, render_mode='human')
     episode = play_episode(env, agent.policy)
     print(f"Episode finished with reward {episode.total_rewards}")
     env.close()
