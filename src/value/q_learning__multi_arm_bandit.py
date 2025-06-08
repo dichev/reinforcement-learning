@@ -1,37 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from envs.bandits import MultiArmBandit
 
-N_BANDITS = 10
+
+K_ARMS = 10
 MAX_REWARD = 10
 
 
-class MultiBandit:
-    def __init__(self, k, max_reward, stationary=False):
-        self.probs = np.random.uniform(0, 1, size=k)
-        self.noise = np.zeros(k)
-        self.stationary = stationary
-        self.max_reward = max_reward
-
-    def step(self, action):
-        if self.stationary:
-            p = self.probs[action]
-        else:
-            p = (self.probs[action] + self.noise[action]).clip(0, 1)
-            self.noise[action] += np.random.normal(0, 0.1)
-
-        reward = np.random.binomial(self.max_reward, p)
-        return reward
-
-    def reset(self):
-        self.noise *= 0
-
-
 class Agent:
-    def __init__(self, n_actions, step_size: str|float = 'sample-average', initial_q=0.):
-        self.n_actions = n_actions
+    def __init__(self, k_actions, step_size: str|float = 'sample-average', initial_q=0.):
+        self.k_actions = k_actions
         self.initial_q = initial_q
-        self.memory = np.zeros((n_actions, 2))
+        self.memory = np.zeros((k_actions, 2))  # [actions, (trials, exp_reward)]
         self.memory[:, 1].fill(initial_q)
         self.step_size = step_size
         self.steps = 0
@@ -53,13 +34,13 @@ class Agent:
 
 
 class EpsilonAgent(Agent):
-    def __init__(self, n_actions, eps_greedy, step_size='sample-average', initial_q=0.):
-        super().__init__(n_actions, step_size, initial_q)
+    def __init__(self, k_actions, eps_greedy, step_size='sample-average', initial_q=0.):
+        super().__init__(k_actions, step_size, initial_q)
         self.eps_greedy = eps_greedy
 
     def policy(self):
         if np.random.random() < self.eps_greedy:
-            return np.random.randint(self.n_actions)
+            return np.random.randint(self.k_actions)
 
         Q = self.memory[:, 1]
         return np.argmax(Q).item()
@@ -69,8 +50,8 @@ class EpsilonAgent(Agent):
 
 
 class SoftmaxAgent(Agent):
-    def __init__(self, n_actions, temp, step_size='sample-average', initial_q=0.):
-        super().__init__(n_actions, step_size, initial_q)
+    def __init__(self, k_actions, temp, step_size='sample-average', initial_q=0.):
+        super().__init__(k_actions, step_size, initial_q)
         self.temp = temp
 
     def policy(self):
@@ -85,14 +66,14 @@ class SoftmaxAgent(Agent):
 
 
 # Test two agents
-agent1 = EpsilonAgent(N_BANDITS, 0.10)
-agent2 = SoftmaxAgent(N_BANDITS, 1.)
-game = MultiBandit(N_BANDITS, MAX_REWARD, True)
+agent1 = EpsilonAgent(K_ARMS, 0.10)
+agent2 = SoftmaxAgent(K_ARMS, 1.)
+env = MultiArmBandit(K_ARMS, MAX_REWARD, True)
 for agent in [agent1, agent2]:
     rewards = []
     for i in range(1000):
         action = agent.policy()
-        reward = game.step(action)
+        reward = env.step(action)
         agent.update(action, reward)
         rewards.append(reward)
     avg_rewards = np.cumsum(rewards) / np.arange(1, len(rewards) + 1)
@@ -105,16 +86,16 @@ plt.show()
 
 
 # Benchmark
-def benchmark(agents, games, steps=10000, subtitle=''):
-    RUNS = len(games)
+def benchmark(agents, envs, steps=10000, subtitle=''):
+    RUNS = len(envs)
     for i, agent in enumerate(agents):
         rewards = np.zeros((RUNS, steps))
-        for run, game in enumerate(tqdm(games, desc=str(agent))):
+        for run, env in enumerate(tqdm(envs, desc=str(agent))):
             agent.reset()
-            game.reset()
+            env.reset()
             for t in range(steps):
                 action = agent.policy()
-                reward = game.step(action)
+                reward = env.step(action)
                 agent.update(action, reward)
                 rewards[run, t] = reward
         plt.plot(rewards.mean(axis=0), label=f'{agent}', linewidth=.7)
@@ -131,13 +112,13 @@ print('Benchmark multiple agents over multiple runs')
 RUNS = 500
 STEPS = 1_000
 agents = (
-    EpsilonAgent(N_BANDITS, 0.),
-    EpsilonAgent(N_BANDITS,  0.01),
-    EpsilonAgent(N_BANDITS,  0.10),
-    SoftmaxAgent(N_BANDITS,  1.00),
+    EpsilonAgent(K_ARMS, 0.),
+    EpsilonAgent(K_ARMS, 0.01),
+    EpsilonAgent(K_ARMS, 0.10),
+    SoftmaxAgent(K_ARMS, 1.00),
 )
-games = [MultiBandit(N_BANDITS, MAX_REWARD, True) for _ in range(RUNS)]
-benchmark(agents, games, STEPS, 'stationary bandits')
+envs = [MultiArmBandit(K_ARMS, MAX_REWARD, True) for _ in range(RUNS)]
+benchmark(agents, envs, STEPS, 'stationary bandits')
 
 
 
@@ -146,11 +127,11 @@ print('Benchmark fixed vs sample-average step size on non-stationary agents')
 RUNS = 500
 STEPS = 10_000
 agents = (
-    EpsilonAgent(N_BANDITS, 0.01, 'sample-average'),
-    EpsilonAgent(N_BANDITS, 0.01, 0.1),
+    EpsilonAgent(K_ARMS, 0.01, 'sample-average'),
+    EpsilonAgent(K_ARMS, 0.01, 0.1),
 )
-games = [MultiBandit(N_BANDITS, MAX_REWARD, False) for _ in range(RUNS)]
-benchmark(agents, games, STEPS, 'NON-stationary bandits')
+envs = [MultiArmBandit(K_ARMS, MAX_REWARD, False) for _ in range(RUNS)]
+benchmark(agents, envs, STEPS, 'NON-stationary bandits')
 
 
 
@@ -159,8 +140,8 @@ print('Benchmark against initial Q values')
 RUNS = 500
 STEPS = 500
 agents = (
-    EpsilonAgent(N_BANDITS, 0., initial_q=MAX_REWARD),
-    EpsilonAgent(N_BANDITS, 0.1, initial_q=0.),
+    EpsilonAgent(K_ARMS, 0., initial_q=MAX_REWARD),
+    EpsilonAgent(K_ARMS, 0.1, initial_q=0.),
 )
-games = [MultiBandit(N_BANDITS, MAX_REWARD, False) for _ in range(RUNS)]
-benchmark(agents, games, STEPS, 'initial Q values, NON-stationary')
+envs = [MultiArmBandit(K_ARMS, MAX_REWARD, False) for _ in range(RUNS)]
+benchmark(agents, envs, STEPS, 'initial Q values, NON-stationary')
