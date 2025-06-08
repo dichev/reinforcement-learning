@@ -21,3 +21,28 @@ class MultiArmBandit:
     def reset(self):
         self.noise *= 0
 
+
+class ContextualBandit:
+    def __init__(self, n_bandits, k_arms, max_reward, stationary=False):
+        self.bandits = [MultiArmBandit(k_arms, max_reward, stationary) for _ in range(n_bandits)]
+        self.n_bandits = n_bandits
+        self.selected = None
+
+    def step(self, action):
+        if self.selected is None: raise Exception('Cannot call env.step() before calling env.reset()')
+
+        state = self.selected
+        reward = self.bandits[self.selected].step(action)
+        self._update()
+        return state, reward
+
+    def reset(self):
+        for bandit in self.bandits:
+            bandit.reset()
+        self._update()
+        return self.selected
+
+    def _update(self):
+        self.selected = np.random.randint(self.n_bandits)
+
+
