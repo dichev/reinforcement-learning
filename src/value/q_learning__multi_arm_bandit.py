@@ -5,7 +5,6 @@ from envs.bandits import MultiArmBandit
 
 
 K_ARMS = 10
-MAX_REWARD = 10
 
 
 class Agent:
@@ -64,11 +63,10 @@ class SoftmaxAgent(Agent):
         return f'SoftmaxAgent(temp={self.temp:.2f}, step={self.step_size}, init_q={self.initial_q})'
 
 
-
 # Test two agents
 agent1 = EpsilonAgent(K_ARMS, 0.10)
-agent2 = SoftmaxAgent(K_ARMS, 1.)
-env = MultiArmBandit(K_ARMS, MAX_REWARD, True)
+agent2 = SoftmaxAgent(K_ARMS, 0.5)
+env = MultiArmBandit(K_ARMS, True)
 for agent in [agent1, agent2]:
     rewards = []
     for i in range(1000):
@@ -115,9 +113,9 @@ agents = (
     EpsilonAgent(K_ARMS, 0.),
     EpsilonAgent(K_ARMS, 0.01),
     EpsilonAgent(K_ARMS, 0.10),
-    SoftmaxAgent(K_ARMS, 1.00),
+    SoftmaxAgent(K_ARMS, 0.5),
 )
-envs = [MultiArmBandit(K_ARMS, MAX_REWARD, True) for _ in range(RUNS)]
+envs = [MultiArmBandit(K_ARMS, True) for _ in range(RUNS)]
 benchmark(agents, envs, STEPS, 'stationary bandits')
 
 
@@ -130,7 +128,7 @@ agents = (
     EpsilonAgent(K_ARMS, 0.01, 'sample-average'),
     EpsilonAgent(K_ARMS, 0.01, 0.1),
 )
-envs = [MultiArmBandit(K_ARMS, MAX_REWARD, False) for _ in range(RUNS)]
+envs = [MultiArmBandit(K_ARMS, False) for _ in range(RUNS)]
 benchmark(agents, envs, STEPS, 'NON-stationary bandits')
 
 
@@ -140,8 +138,9 @@ print('Benchmark against initial Q values')
 RUNS = 500
 STEPS = 500
 agents = (
-    EpsilonAgent(K_ARMS, 0., initial_q=MAX_REWARD),
+    EpsilonAgent(K_ARMS, 0., initial_q=5),
     EpsilonAgent(K_ARMS, 0.1, initial_q=0.),
 )
-envs = [MultiArmBandit(K_ARMS, MAX_REWARD, False) for _ in range(RUNS)]
+envs = [MultiArmBandit(K_ARMS, False) for _ in range(RUNS)]
 benchmark(agents, envs, STEPS, 'initial Q values, NON-stationary')
+

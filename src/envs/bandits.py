@@ -1,12 +1,10 @@
 import numpy as np
 
-
 class MultiArmBandit:
-    def __init__(self, k_arms, max_reward, stationary=False):
-        self.probs = np.random.uniform(0, 1, size=k_arms)
+    def __init__(self, k_arms, stationary=False):
+        self.probs = np.random.normal(0, 1, size=k_arms)
         self.noise = np.zeros(k_arms)
         self.stationary = stationary
-        self.max_reward = max_reward
 
     def step(self, action):
         if self.stationary:
@@ -15,7 +13,7 @@ class MultiArmBandit:
             p = (self.probs[action] + self.noise[action]).clip(0, 1)
             self.noise[action] += np.random.normal(0, 0.1)
 
-        reward = np.random.binomial(self.max_reward, p)
+        reward = np.random.normal(p, 0.1)
         return reward
 
     def reset(self):
@@ -23,8 +21,8 @@ class MultiArmBandit:
 
 
 class ContextualBandit:
-    def __init__(self, n_bandits, k_arms, max_reward, stationary=False):
-        self.bandits = [MultiArmBandit(k_arms, max_reward, stationary) for _ in range(n_bandits)]
+    def __init__(self, n_bandits, k_arms, stationary=False):
+        self.bandits = [MultiArmBandit(k_arms, stationary) for _ in range(n_bandits)]
         self.n_bandits = n_bandits
         self.selected = None
 
@@ -46,3 +44,15 @@ class ContextualBandit:
         self.selected = np.random.randint(self.n_bandits)
 
 
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+
+    env = MultiArmBandit(10, True)
+    for action in range(10):
+        r = [env.step(action) for _ in range(1000)]
+        plt.hist(r, bins=100, label=f'arm {action}', alpha=.5, density=True)
+    plt.ylabel('rewards')
+    plt.title('Multi-arm bandit')
+    plt.legend()
+    plt.show()
