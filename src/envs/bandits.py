@@ -29,10 +29,10 @@ class ContextualBandit:
     def step(self, action):
         if self.selected is None: raise Exception('Cannot call env.step() before calling env.reset()')
 
-        state = self.selected
         reward = self.bandits[self.selected].step(action)
         self._update()
-        return state, reward
+        state_next = self.selected
+        return state_next, reward
 
     def reset(self):
         for bandit in self.bandits:
