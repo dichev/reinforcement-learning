@@ -1,10 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
+from torch import nn
+from torch.nn import functional as F
 from envs.bandits import ContextualBandit
 
 N_BANDITS   = 8    # states
 K_ARMS      = 10   # actions
 STEPS       = 10_000
+HIDDEN_SIZE = 32
 
 
 class EpsilonAgent:
@@ -38,6 +42,37 @@ class EpsilonAgent:
         return f'EpsilonAgent(eps={self.eps_greedy:.2f}, step={self.step_size}, init_q={self.initial_q})'
 
 
+
+class NeuralAgent:
+    def __init__(self, k_actions, n_states, hidden_size):
+        self.k_actions = k_actions
+        self.n_states = n_states
+        self.net = nn.Sequential(
+            nn.Linear(n_states, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, k_actions),
+        )
+        self.hidden_size = hidden_size
+
+    def forward(self, state):
+        state = F.one_hot(torch.tensor(state), num_classes=self.n_states).float()
+        return self.net(state)
+
+    @torch.no_grad()
+    def reset(self):
+        self.net.apply(lambda m: m.reset_parameters() if hasattr(m, 'reset_parameters') else None)
+
+    @torch.no_grad()
+    def policy(self, state):
+        Q = agent.forward(state)
+        p = F.softmax(Q, dim=-1)
+        action = torch.multinomial(p, num_samples=1)
+        return action.item()
+
+    def __repr__(self):
+        return f'NeuralAgent(hidden_size={self.hidden_size},)'
+
+
 class RandomAgent:
     def __init__(self, k_actions, n_states):
         self.k_actions = k_actions
@@ -59,24 +94,40 @@ env = ContextualBandit(N_BANDITS, K_ARMS, True)
 agents = (
     RandomAgent(K_ARMS, N_BANDITS),
     EpsilonAgent(K_ARMS, N_BANDITS,  0.10, step_size=0.1),
+    NeuralAgent(K_ARMS, N_BANDITS, HIDDEN_SIZE),
 )
+loss_fn = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(params=agents[-1].net.parameters(), lr=.001)
+
 for agent in agents:
     agent.reset()
     state = env.reset()
     rewards = []
     mov_rewards = []
     mov_reward = 0
+    mov_loss = 0
 
     for t in range(1, STEPS + 1):
         action = agent.policy(state)
         state_next, reward = env.step(action)
-        agent.update(action, state, reward)
+
+        if isinstance(agent, NeuralAgent):
+            optimizer.zero_grad()
+            Q = agent.forward(state)
+            R = F.one_hot(torch.tensor(action), num_classes=K_ARMS).float() * reward
+            loss = loss_fn(Q, R)
+            loss.backward()
+            optimizer.step()
+            mov_loss = (.9 * mov_loss + .1 * loss.item()) if t > 0 else loss.item()
+        else:
+            agent.update(action, state, reward)
+
         state = state_next
         rewards.append(reward)
         mov_reward = (.99 * mov_reward + .01 * reward) if t > 0 else reward
         mov_rewards.append(mov_reward)
-        if t % 100 == 0:
-            print(f'{t:>5}/{STEPS}) {agent} | avg_rewards={np.mean(rewards):.2f}, mov_rewards={np.mean(mov_rewards[-1]):.2f}')
+        if t % 1000 == 0:
+            print(f'{t:>5}/{STEPS}) {agent} | avg_rewards={np.mean(rewards):.2f}, mov_rewards={np.mean(mov_rewards[-1]):.2f}' + (f', {mov_loss=:.4f}' if isinstance(agent, NeuralAgent) else '') )
 
     avg_rewards = np.cumsum(rewards) / np.arange(1, len(rewards) + 1)
     plt.scatter(range(len(rewards)), rewards, s=.005)
