@@ -2,11 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from envs.bandits import ContextualBandit
 
-
-N_BANDITS   = 12    # states
+N_BANDITS   = 8    # states
 K_ARMS      = 10   # actions
-MAX_REWARD  = 10
-STEPS       = 1000 * N_BANDITS
+STEPS       = 10_000
 
 
 class EpsilonAgent:
@@ -40,17 +38,13 @@ class EpsilonAgent:
         return f'EpsilonAgent(eps={self.eps_greedy:.2f}, step={self.step_size}, init_q={self.initial_q})'
 
 
-
 class RandomAgent:
     def __init__(self, k_actions, n_states):
         self.k_actions = k_actions
         self.n_states = n_states
 
-    def update(self, action, state, reward):
-        pass
-
-    def reset(self):
-        pass
+    def update(self, *args, **kwargs): pass
+    def reset(self): pass
 
     def policy(self, state):
         return np.random.randint(self.k_actions)
@@ -60,12 +54,11 @@ class RandomAgent:
 
 
 
-
 # Test two agents
-env = ContextualBandit(N_BANDITS, K_ARMS, MAX_REWARD, True)
+env = ContextualBandit(N_BANDITS, K_ARMS, True)
 agents = (
     RandomAgent(K_ARMS, N_BANDITS),
-    EpsilonAgent(K_ARMS, N_BANDITS,  0.1),
+    EpsilonAgent(K_ARMS, N_BANDITS,  0.10, step_size=0.1),
 )
 for agent in agents:
     agent.reset()
@@ -86,9 +79,32 @@ for agent in agents:
             print(f'{t:>5}/{STEPS}) {agent} | avg_rewards={np.mean(rewards):.2f}, mov_rewards={np.mean(mov_rewards[-1]):.2f}')
 
     avg_rewards = np.cumsum(rewards) / np.arange(1, len(rewards) + 1)
-    plt.scatter(range(len(rewards)), rewards, s=.01, label=f'{agent}')
+    plt.scatter(range(len(rewards)), rewards, s=.005)
     plt.plot(mov_rewards, label=f'{agent}')
 plt.title('Rewards over time (single run)')
+optimal_reward = env.optimal_reward
+plt.hlines(optimal_reward, 0, STEPS, color="green", linestyles='dashed')
+plt.text(0, optimal_reward+.1, f'optimal reward', horizontalalignment='left')
 plt.legend()
+plt.tight_layout()
 plt.show()
 
+
+# For analysis
+"""
+agent = agents[1]
+analyze = {
+    'E[R]': np.array([b.probs for b in env.bandits]).T,
+    'Q': agent.memory[:, :, 1],
+    'N': agent.memory[:, :, 0],
+}
+fig = plt.figure(figsize=np.array([N_BANDITS * 3, K_ARMS]).clip(6, 20))
+for i, (k, v) in enumerate(analyze.items()):
+    plt.subplot(1, 3, i + 1)
+    plt.title(k)
+    plt.imshow(v, cmap='Blues')
+    plt.xlabel('states')
+    plt.ylabel('actions')
+plt.tight_layout()
+plt.show()
+"""

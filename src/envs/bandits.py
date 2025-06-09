@@ -1,10 +1,12 @@
 import numpy as np
 
 class MultiArmBandit:
-    def __init__(self, k_arms, stationary=False):
+    def __init__(self, k_arms, stationary=False, rewards_boost=5):
         self.probs = np.random.normal(0, 1, size=k_arms)
+        self.probs[np.random.randint(k_arms)] += rewards_boost  # one of the arms pays far more than others (simplifies the analysis)
         self.noise = np.zeros(k_arms)
         self.stationary = stationary
+        self.optimal_reward = np.max(self.probs)
 
     def step(self, action):
         if self.stationary:
@@ -21,27 +23,28 @@ class MultiArmBandit:
 
 
 class ContextualBandit:
-    def __init__(self, n_bandits, k_arms, stationary=False):
-        self.bandits = [MultiArmBandit(k_arms, stationary) for _ in range(n_bandits)]
+    def __init__(self, n_bandits, k_arms, stationary=False, rewards_boost=5):
+        self.bandits = [MultiArmBandit(k_arms, stationary, rewards_boost) for _ in range(n_bandits)]
         self.n_bandits = n_bandits
         self.selected = None
+        self.optimal_reward = sum(bandit.optimal_reward for bandit in self.bandits) / n_bandits
 
     def step(self, action):
         if self.selected is None: raise Exception('Cannot call env.step() before calling env.reset()')
 
         reward = self.bandits[self.selected].step(action)
-        self._update()
-        state_next = self.selected
+        state_next = self._switch_bandit()
         return state_next, reward
 
     def reset(self):
         for bandit in self.bandits:
             bandit.reset()
-        self._update()
-        return self.selected
+        state = self._switch_bandit()
+        return state
 
-    def _update(self):
+    def _switch_bandit(self):
         self.selected = np.random.randint(self.n_bandits)
+        return self.selected
 
 
 
