@@ -8,7 +8,7 @@ class DiscreteOneHotWrapper(gym.ObservationWrapper):
     """
 
     def __init__(self, env):
-        super(DiscreteOneHotWrapper, self).__init__(env)
+        super().__init__(env)
         assert isinstance(env.observation_space, gym.spaces.Discrete)
         self.observation_space = gym.spaces.Box(0.0, 1.0, (env.observation_space.n, ), dtype=np.float32)
 
@@ -24,7 +24,7 @@ class DiscountedRewardWrapper(gym.RewardWrapper):
     """
 
     def __init__(self, env, gamma=0.99):
-        super(DiscountedRewardWrapper, self).__init__(env)
+        super().__init__(env)
         self.gamma = gamma
         self._steps = 0
 
@@ -46,7 +46,7 @@ class StepPenaltyWrapper(gym.Wrapper):
     """
 
     def __init__(self, env, step_penalty=-0.01):
-        super(StepPenaltyWrapper, self).__init__(env)
+        super().__init__(env)
         self.step_penalty = step_penalty
 
     def step(self, action):

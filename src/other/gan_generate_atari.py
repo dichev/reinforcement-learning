@@ -23,7 +23,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Generator(nn.Module):
     def __init__(self, output_shape):
-        super(Generator, self).__init__()
+        super().__init__()
         # pipe deconvolves input vector into (3, 64, 64) image
         self.pipe = nn.Sequential(
             nn.ConvTranspose2d(in_channels=LATENT_SIZE, out_channels=FILTERS_SIZE_MPLR * 8, kernel_size=4, stride=1, padding=0),
@@ -48,7 +48,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, input_shape):
-        super(Discriminator, self).__init__()
+        super().__init__()
         # this pipe converges image into the single number
         self.conv_pipe = nn.Sequential(
             nn.Conv2d(in_channels=input_shape[0], out_channels=FILTERS_SIZE_MPLR, kernel_size=4, stride=2, padding=1),

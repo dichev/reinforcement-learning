@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from lib.playground import batched_episodes, play_episode
 from lib.tracking import writer_add_params
-import envs.custom_games
+import envs.custom_gym
 
 class DefaultConfig:
     PERCENTILE = 70
@@ -36,7 +36,7 @@ cfg = CartPoleConfig
 class Agent(nn.Module):
 
     def __init__(self, obs_size, n_actions):
-        super(Agent, self).__init__()
+        super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_size, cfg.HIDDEN_SIZE),
             nn.ReLU(),
