@@ -101,28 +101,28 @@ optimizer = torch.optim.Adam(params=agents[-1].net.parameters(), lr=.001)
 
 for agent in agents:
     agent.reset()
-    state = env.reset()
+    obs = env.reset()
     rewards = []
     mov_rewards = []
     mov_reward = 0
     mov_loss = 0
 
     for t in range(1, STEPS + 1):
-        action = agent.policy(state)
-        state_next, reward = env.step(action)
+        action = agent.policy(obs)
+        obs_next, reward = env.step(action)
 
         if isinstance(agent, NeuralAgent):
             optimizer.zero_grad()
-            Q = agent.forward(state)
+            Q = agent.forward(obs)
             R = F.one_hot(torch.tensor(action), num_classes=K_ARMS).float() * reward
             loss = loss_fn(Q, R)
             loss.backward()
             optimizer.step()
             mov_loss = (.9 * mov_loss + .1 * loss.item()) if t > 0 else loss.item()
         else:
-            agent.update(action, state, reward)
+            agent.update(action, obs, reward)
 
-        state = state_next
+        obs = obs_next
         rewards.append(reward)
         mov_reward = (.99 * mov_reward + .01 * reward) if t > 0 else reward
         mov_rewards.append(mov_reward)

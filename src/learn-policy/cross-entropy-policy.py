@@ -35,16 +35,16 @@ cfg = CartPoleConfig
 
 class Agent(nn.Module):
 
-    def __init__(self, obs_size, n_actions):
+    def __init__(self, state_size, n_actions):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_size, cfg.HIDDEN_SIZE),
+            nn.Linear(state_size, cfg.HIDDEN_SIZE),
             nn.ReLU(),
             nn.Linear(cfg.HIDDEN_SIZE, n_actions),
         )
 
-    def forward(self, obs):
-        return self.net(obs)
+    def forward(self, state):
+        return self.net(state)
 
     @torch.no_grad()
     def policy(self, state):

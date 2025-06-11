@@ -33,14 +33,14 @@ class ContextualBandit:
         if self.selected is None: raise Exception('Cannot call env.step() before calling env.reset()')
 
         reward = self.bandits[self.selected].step(action)
-        state_next = self._switch_bandit()
-        return state_next, reward
+        obs_next = self._switch_bandit()
+        return obs_next, reward
 
     def reset(self):
         for bandit in self.bandits:
             bandit.reset()
-        state = self._switch_bandit()
-        return state
+        obs = self._switch_bandit()
+        return obs
 
     def _switch_bandit(self):
         self.selected = np.random.randint(self.n_bandits)

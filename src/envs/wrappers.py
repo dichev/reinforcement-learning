@@ -4,7 +4,7 @@ import gymnasium as gym
 
 class DiscreteOneHotWrapper(gym.ObservationWrapper):
     """
-    Converts discrete state to one-hot vector.
+    Converts discrete observation to one-hot vector.
     """
 
     def __init__(self, env):
@@ -12,9 +12,9 @@ class DiscreteOneHotWrapper(gym.ObservationWrapper):
         assert isinstance(env.observation_space, gym.spaces.Discrete)
         self.observation_space = gym.spaces.Box(0.0, 1.0, (env.observation_space.n, ), dtype=np.float32)
 
-    def observation(self, state):
+    def observation(self, observation):
         onehot = np.zeros(self.observation_space.shape, dtype=np.float32)
-        onehot[state] = 1.0
+        onehot[observation] = 1.0
         return onehot
 
 
@@ -50,10 +50,10 @@ class StepPenaltyWrapper(gym.Wrapper):
         self.step_penalty = step_penalty
 
     def step(self, action):
-        state, reward, terminated, truncated, info = self.env.step(action)
+        obs, reward, terminated, truncated, info = self.env.step(action)
         if not (terminated or truncated):
             reward = self.step_penalty
 
-        return state, reward, terminated, truncated, info
+        return obs, reward, terminated, truncated, info
 
 
