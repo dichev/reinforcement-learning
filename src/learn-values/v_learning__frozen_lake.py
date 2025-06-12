@@ -1,8 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import gymnasium as gym
-from lib.playground import play_episode
-
+from lib.playground import play_episode, play_random
 
 ENV = 'FrozenLake-v1'  # slippery
 MAX_ITERATIONS = 200
@@ -69,18 +68,16 @@ avg_rewards = []
 for i in range(1, MAX_ITERATIONS + 1):
 
     # learning
-    obs, info = env.reset()
-    for t in range(LEARNING_RANDOM_STEPS):
-        action = env.action_space.sample() # NO policy, random exploration
-        obs_next, reward, terminated, truncated, info = env.step(action)
+    for obs, action, reward, obs_next in play_random(env, LEARNING_RANDOM_STEPS):
         agent.collect(obs, action, reward, obs_next)
-        if terminated or truncated:
-            obs_next, info = env.reset()
-        obs = obs_next
     agent.update_values()
 
     # testing
-    episodes = [play_episode(env, agent.policy, False) for _ in range(TEST_EPISODES)]  # todo: can collect the transitions and rewards too
+    episodes = [play_episode(env, agent.policy, False) for _ in range(TEST_EPISODES)]
+    for e in episodes:
+        for obs, action, reward, obs_next in e.as_trajectory():
+            agent.collect(obs, action, reward, obs_next)
+
     avg_reward = sum([ep.total_rewards for ep in episodes]) / TEST_EPISODES
     avg_rewards.append(avg_reward)
     print(f'{i:>5}/{MAX_ITERATIONS}) {agent} | avg_rewards={avg_reward:.2f}')

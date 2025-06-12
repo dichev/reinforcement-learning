@@ -60,6 +60,16 @@ def play_episode(env, policy, as_tensors=True):
 
         obs = obs_next
 
+def play_random(env, steps=1):
+    obs, _ = env.reset()
+    for t in range(steps):
+        action = env.action_space.sample()
+        obs_next, reward, terminated, truncated, _ = env.step(action)
+        yield obs, action, reward, obs_next
+        if terminated or truncated:
+            obs_next, _ = env.reset()
+        obs = obs_next
+
 
 if __name__ == '__main__':
     import gymnasium as gym
