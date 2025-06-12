@@ -26,30 +26,29 @@ class Agent:
         self.memory['rewards'][state, action, state_next] = reward  # note: average it for stochastic rewards
         self.memory['transitions'][state, action, state_next] += 1
 
-
-    def update_values(self):
-        Q = np.zeros_like(self.memory['q_values'])
-        for action in range(self.k_actions):
-            for state in range(self.n_states):
-                counts = self.memory['transitions'][state, action]
-                total = counts.sum()
-
-                # skip states with no transitions
-                filtered_states = np.where(counts > 0)[0]
-
-                # average over future states
-                q = 0.
-                for i, state_next in enumerate(filtered_states):
-                    p = counts[state_next] / total
-                    r = self.memory['rewards'][state, action, state_next]
-                    a = self.policy(state_next)
-                    q_next = self.memory['q_values'][state_next, a]
-                    q += p * (r + self.gamma * q_next)
-
-                Q[state, action] = q
-
+    def update_action_values(self):
+        Q = [[self.calc_actions_values(state, action) for action in range(self.k_actions)] for state in range(self.n_states)]
+        Q = np.array(Q)
         # synchronously update all the q values
         self.memory['q_values'][:] = Q
+
+    def calc_actions_values(self, state, action):
+        counts = self.memory['transitions'][state, action]
+        total = counts.sum()
+
+        # skip states with no transitions
+        filtered_states = np.where(counts > 0)[0]
+
+        # average over future states
+        q = 0.
+        for i, state_next in enumerate(filtered_states):
+            p = counts[state_next] / total
+            r = self.memory['rewards'][state, action, state_next]
+            a = self.policy(state_next)
+            q_next = self.memory['q_values'][state_next, a]
+            q += p * (r + self.gamma * q_next)
+
+        return q
 
     def policy(self, state):
         Q = self.memory['q_values'][state]
@@ -70,7 +69,7 @@ for i in range(1, MAX_ITERATIONS + 1):
     # learning
     for obs, action, reward, obs_next in play_random(env, LEARNING_RANDOM_STEPS):
         agent.collect(obs, action, reward, obs_next)
-    agent.update_values()
+    agent.update_action_values()
 
     # testing
     episodes = [play_episode(env, agent.policy, False) for _ in range(TEST_EPISODES)]
