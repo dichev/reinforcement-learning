@@ -16,7 +16,7 @@ class DefaultConfig:
     LOG_STEP = 10
 
 class FrozenLakeConfig(DefaultConfig):
-    ENV = 'custom/FrozenLake-OneHot-StepPenalty'
+    ENV = 'custom/FrozenLake-OneHot-DiscountedReward'
     ENV_SOLVED_REWARD = .95
     PRESERVE_ELITE = True
     BATCH_SIZE = 100
