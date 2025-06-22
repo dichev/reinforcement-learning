@@ -26,7 +26,7 @@ class Episode:
         observations = torch.tensor(np.stack(self.observations), device=device)
         actions = torch.tensor(self.actions, device=device)
         rewards = torch.tensor(self.rewards, device=device)
-        term_observation = torch.tensor(self.term_observation, device=device)
+        term_observation = torch.tensor(self.term_observation, device=device) if self.done else None
         done = torch.tensor(self.done, device=device, dtype=torch.long)
         return observations, actions, rewards, term_observation, done
 
@@ -60,7 +60,8 @@ def play_episode(env, policy):
         obs_next, reward, terminated, truncated, _ = env.step(action)
         episode.step(obs, action, reward)
         if terminated or truncated:
-            episode.finish(obs_next)
+            if terminated:
+                episode.finish(obs_next)
             return episode
 
         obs = obs_next
