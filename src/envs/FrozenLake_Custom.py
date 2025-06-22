@@ -11,15 +11,15 @@ def make__FrozenLake_OneHot_DiscountedReward(render_mode=None, is_slippery=False
     return env
 
 
-env_id = 'custom/FrozenLake-OneHot-StepPenalty'
+env_id = 'custom/FrozenLake_OneHot_DiscountedReward'
 if env_id not in gym.envs.registry:
-    register(id=env_id, entry_point='src.envs.custom_games:make__FrozenLake_OneHot_DiscountedReward')
+    register(id=env_id, entry_point='src.envs.FrozenLake_Custom:make__FrozenLake_OneHot_DiscountedReward')
 
 
 
 # Testing only
 if __name__ == '__main__':
-    env = gym.make('custom/FrozenLake-OneHot-DiscountedReward', render_mode='human')
+    env = gym.make('custom/FrozenLake_OneHot_DiscountedReward', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)
     env.close()

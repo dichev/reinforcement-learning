@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from lib.playground import batched_episodes, play_episode
 from lib.tracking import writer_add_params
-import envs.custom_gym
+import envs.FrozenLake_Custom
 
 class DefaultConfig:
     PERCENTILE = 70
@@ -16,7 +16,7 @@ class DefaultConfig:
     LOG_STEP = 10
 
 class FrozenLakeConfig(DefaultConfig):
-    ENV = 'custom/FrozenLake-OneHot-DiscountedReward'
+    ENV = 'custom/FrozenLake_OneHot_DiscountedReward'
     ENV_SOLVED_REWARD = .95
     PRESERVE_ELITE = True
     BATCH_SIZE = 100
