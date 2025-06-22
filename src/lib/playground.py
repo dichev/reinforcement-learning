@@ -6,38 +6,35 @@ class Episode:
         self.actions = []
         self.rewards = []
         self.observations = []
-        self.term_observation = None
+        self.observations_next = []
         self.total_rewards = 0
         self.steps = 0
         self.done = False
 
-    def step(self, obs, action, reward):
+    def step(self, obs, action, reward, obs_next, done):
         self.observations.append(obs)
+        self.observations_next.append(obs_next)
         self.actions.append(action)
         self.rewards.append(reward)
         self.total_rewards += reward
         self.steps += 1
-
-    def finish(self, term_obs):
-        self.term_observation = term_obs
-        self.done = True
+        self.done = done
 
     def as_tensors(self, device=None):
-        observations = torch.tensor(np.stack(self.observations), device=device)
+        obs = torch.tensor(np.stack(self.observations), device=device)
         actions = torch.tensor(self.actions, device=device)
         rewards = torch.tensor(self.rewards, device=device)
-        term_observation = torch.tensor(self.term_observation, device=device) if self.done else None
+        obs_next = torch.tensor(np.stack(self.observations), device=device)
         done = torch.tensor(self.done, device=device, dtype=torch.long)
-        return observations, actions, rewards, term_observation, done
+        return obs, actions, rewards, obs_next, done
 
     def as_trajectory(self):
         for i in range(self.steps):
             obs = self.observations[i]
             action = self.actions[i]
             reward = self.rewards[i]
-            done = int(self.done and i == len(self.observations) - 1)
-            obs_next = self.observations[i + 1] if not done else self.term_observation
-            yield obs, action, reward, obs_next, done
+            obs_next = self.observations_next[i]
+            yield obs, action, reward, obs_next, self.done
 
 
     def __repr__(self):
@@ -58,10 +55,8 @@ def play_episode(env, policy):
     while True:
         action = policy(obs)
         obs_next, reward, terminated, truncated, _ = env.step(action)
-        episode.step(obs, action, reward)
+        episode.step(obs, action, reward, obs_next, terminated)
         if terminated or truncated:
-            if terminated:
-                episode.finish(obs_next)
             return episode
 
         obs = obs_next
