@@ -18,14 +18,17 @@ class Episode:
         self.total_rewards += reward
         self.steps += 1
 
-    def finish(self, term_obs, as_tensors=True):
+    def finish(self, term_obs):
         self.term_observation = term_obs
         self.done = True
-        if as_tensors:
-            self.observations = torch.tensor(np.stack(self.observations))
-            self.actions = torch.tensor(self.actions)
-            self.rewards = torch.tensor(self.rewards)
-            self.term_observation = torch.tensor(term_obs)
+
+    def as_tensors(self, device=None):
+        observations = torch.tensor(np.stack(self.observations), device=device)
+        actions = torch.tensor(self.actions, device=device)
+        rewards = torch.tensor(self.rewards, device=device)
+        term_observation = torch.tensor(self.term_observation, device=device)
+        done = torch.tensor(self.done, device=device, dtype=torch.long)
+        return observations, actions, rewards, term_observation, done
 
     def as_trajectory(self):
         for i in range(self.steps):
@@ -45,11 +48,11 @@ class Episode:
 @torch.no_grad()
 def batched_episodes(env, policy, num_episodes):
     while True:
-        batch = [play_episode(env, policy, as_tensors=True) for _ in range(num_episodes)]
+        batch = [play_episode(env, policy) for _ in range(num_episodes)]
         yield batch
 
 @torch.no_grad()
-def play_episode(env, policy, as_tensors=True):
+def play_episode(env, policy):
     episode = Episode()
     obs, _ = env.reset()
     while True:
@@ -57,7 +60,7 @@ def play_episode(env, policy, as_tensors=True):
         obs_next, reward, terminated, truncated, _ = env.step(action)
         episode.step(obs, action, reward)
         if terminated or truncated:
-            episode.finish(obs_next, as_tensors)
+            episode.finish(obs_next)
             return episode
 
         obs = obs_next

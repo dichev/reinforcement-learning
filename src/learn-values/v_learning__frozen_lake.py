@@ -104,7 +104,7 @@ for agent in agents:
         agent.update_values()
 
         # testing
-        episodes = [play_episode(env, agent.policy, False) for _ in range(TEST_EPISODES)]
+        episodes = [play_episode(env, agent.policy) for _ in range(TEST_EPISODES)]
         for e in episodes:
             for obs, action, reward, obs_next, done in e.as_trajectory():
                 agent.collect(obs, action, reward, obs_next)

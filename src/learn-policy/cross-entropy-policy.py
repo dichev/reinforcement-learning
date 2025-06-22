@@ -84,8 +84,9 @@ if __name__ == '__main__':
             elite, _ = filter_episodes(elite + elite_preserved)
             elite_preserved = elite = elite[:cfg.BATCH_SIZE]
 
-        obs = torch.cat([ep.observations for ep in elite])   # T, D
-        actions = torch.cat([ep.actions for ep in elite])    # T
+        observations, actions, _, _, _ = zip(*[ep.as_tensors() for ep in elite])
+        obs = torch.cat(observations)  # T, D
+        actions = torch.cat(actions)   # T
 
         optimizer.zero_grad()
         z = agent(obs)
