@@ -22,17 +22,19 @@ class Episode:
         self.term_observation = term_obs
         self.done = True
         if as_tensors:
-            self.observations = torch.tensor(np.vstack(self.observations))
+            self.observations = torch.tensor(np.stack(self.observations))
             self.actions = torch.tensor(self.actions)
             self.rewards = torch.tensor(self.rewards)
+            self.term_observation = torch.tensor(term_obs)
 
     def as_trajectory(self):
         for i in range(self.steps):
             obs = self.observations[i]
             action = self.actions[i]
             reward = self.rewards[i]
-            obs_next = self.observations[i + 1] if i < len(self.observations) - 1 else self.term_observation
-            yield obs, action, reward, obs_next
+            done = int(self.done and i == len(self.observations) - 1)
+            obs_next = self.observations[i + 1] if not done else self.term_observation
+            yield obs, action, reward, obs_next, done
 
 
     def __repr__(self):

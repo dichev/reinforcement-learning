@@ -106,7 +106,7 @@ for agent in agents:
         # testing
         episodes = [play_episode(env, agent.policy, False) for _ in range(TEST_EPISODES)]
         for e in episodes:
-            for obs, action, reward, obs_next in e.as_trajectory():
+            for obs, action, reward, obs_next, done in e.as_trajectory():
                 agent.collect(obs, action, reward, obs_next)
 
         avg_reward = sum([ep.total_rewards for ep in episodes]) / TEST_EPISODES
