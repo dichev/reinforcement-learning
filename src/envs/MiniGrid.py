@@ -18,24 +18,28 @@ class FilterObservations(gym.ObservationWrapper):
 
 
 
-def make__GridWorld(render_mode=None):
+def make__MiniGrid(render_mode=None):
     env = gym.make("MiniGrid-LavaCrossingS9N3-v0", render_mode=render_mode)
+    # env = gym.make("MiniGrid-Empty-Random-5x5-v0", render_mode=render_mode)
+    # env = gym.make("MiniGrid-Empty-5x5-v0", render_mode=render_mode)
     env = FullyObsWrapper(env)     # full observability
     env = ImgObsWrapper(env)       # Get rid of the 'mission' field
     env = FilterObservations(env)  # Filter only objects data
+
+    # todo: normalize the state? / add small noise? / reward on each step?
     return env
 
 
 
-env_id = 'custom/GridWorld'
+env_id = 'custom/MiniGrid'
 if env_id not in gym.envs.registry:
-    register(id=env_id, entry_point='src.envs.GridWorld:make__GridWorld')
+    register(id=env_id, entry_point='src.envs.MiniGrid:make__MiniGrid')
 
 
 
 # Testing only
 if __name__ == '__main__':
-    env = gym.make('custom/GridWorld', render_mode='human')
+    env = gym.make('custom/MiniGrid', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)
     print(episode.observations[-1])
