@@ -31,14 +31,9 @@ def make__MiniGrid(render_mode=None):
 
 
 
-env_id = 'custom/MiniGrid'
-if env_id not in gym.envs.registry:
-    register(id=env_id, entry_point='src.envs.MiniGrid:make__MiniGrid')
-
-
-
 # Testing only
 if __name__ == '__main__':
+    import custom_gyms
     env = gym.make('custom/MiniGrid', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)

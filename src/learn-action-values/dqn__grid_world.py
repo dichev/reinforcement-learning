@@ -1,6 +1,6 @@
 import torch
 from torch import nn, optim
-import envs.GridWorldGym
+import envs.custom_gyms
 import gymnasium as gym
 import math
 import matplotlib.pyplot as plt

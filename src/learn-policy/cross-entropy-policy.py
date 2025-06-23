@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from lib.playground import batched_episodes, play_episode
 from lib.tracking import writer_add_params
-import envs.FrozenLake_Custom
+import envs.custom_gyms
 
 class DefaultConfig:
     PERCENTILE = 70
