@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from collections import deque
+import random
 
 class Episode:
     def __init__(self):
@@ -39,6 +41,42 @@ class Episode:
 
     def __repr__(self):
         return f'Episode(steps={self.steps}, total_rewards={self.total_rewards}, done={self.done})'
+
+
+
+class ReplayBuffer:
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.steps = deque(maxlen=capacity)
+
+    def add(self, episode: Episode):
+        for obs, action, reward, obs_next, done in episode.as_trajectory():
+            self.add_step(obs, action, reward, obs_next, done, False)
+
+    def add_step(self, obs, action, reward, obs_next, terminated, truncated):
+        self.steps.append((obs, action, reward, obs_next, terminated))
+
+
+    def sample(self, batch_size, device=None):
+        assert len(self.steps) >= batch_size, f"Replay buffer has {len(self.steps)} steps, but batch_size={batch_size}"
+        batch = random.sample(self.steps, batch_size)
+        obs, actions, rewards, obs_next, done = zip(*batch)
+
+        obs = torch.tensor(np.stack(obs), dtype=torch.float, device=device).view(batch_size, -1)
+        actions = torch.tensor(actions, dtype=torch.long, device=device).view(batch_size, -1)
+        rewards = torch.tensor(rewards, dtype=torch.float, device=device).view(batch_size, -1)
+        obs_next = torch.tensor(np.stack(obs_next), dtype=torch.float, device=device).view(batch_size, -1)
+        done = torch.tensor(done, dtype=torch.long, device=device).view(batch_size, -1)
+
+        return obs, actions, rewards, obs_next, done
+
+    @property
+    def size(self):
+        return len(self.steps)
+
+    def __repr__(self):
+        return f'ReplayBuffer(size={self.size}, capacity={self.capacity})'
 
 
 
@@ -83,4 +121,8 @@ if __name__ == '__main__':
     print(f"Episode finished with reward {episode.total_rewards}")
     trajectory = list(episode.as_trajectory())
     print(trajectory)
+    replay = ReplayBuffer(capacity=1000)
+    replay.add(episode)
+    print(replay)
+    batch = replay.sample(batch_size=10)
     env.close()
