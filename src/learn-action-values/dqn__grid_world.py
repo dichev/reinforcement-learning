@@ -4,6 +4,7 @@ import envs.custom_gyms
 import gymnasium as gym
 import math
 import matplotlib.pyplot as plt
+import copy
 from lib.playground import play_episode, play_steps, ReplayBuffer
 
 
@@ -17,9 +18,13 @@ REPLAY_SIZE = 1000 # steps
 BATCH_SIZE = 256   # steps
 DEVICE = 'cuda'
 
+TARGET_NET_ENABLED = True
+TARGET_NET_SYNC_STEPS = 50
+
+
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_states, hidden_size=HIDDEN_SIZE, eps=EPS_GREEDY):
+    def __init__(self, k_actions, n_states, hidden_size=HIDDEN_SIZE, eps=EPS_GREEDY, use_target_net=TARGET_NET_ENABLED):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(n_states, hidden_size),
@@ -28,12 +33,19 @@ class DQNAgent(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, k_actions),
         )
+        if use_target_net:
+            self.target_net = copy.deepcopy(self.net)
+            self.target_net.requires_grad_(False)
+
         self.eps = eps
         self.k_actions = k_actions
         self.n_states = n_states
 
     def forward(self, state):
         return self.net(state)  # B, S  ->  B, A
+
+    def sync_target_net(self):
+        self.target_net.load_state_dict(self.net.state_dict())
 
     @torch.no_grad()
     def policy(self, state, greedy=False):
@@ -45,14 +57,12 @@ class DQNAgent(nn.Module):
         return Q.argmax(dim=-1).item()
 
 
-# env = GridWorldGym(**ENV_SETTINGS)
 env = gym.make(**ENV_SETTINGS)
 state_size = math.prod(env.observation_space.shape)
 agent = DQNAgent(env.action_space.n, state_size).to(DEVICE)
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
-
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer with {BATCH_SIZE} episodes")
@@ -63,9 +73,10 @@ while replay.size < BATCH_SIZE:
 exp_iterator = play_steps(env, policy=agent.policy)
 
 
-print(f"Training {EPOCHS} epochs")
+print(f"Training {EPOCHS} epochs. Target network: {TARGET_NET_ENABLED}")
 mov_loss = 0
 history = []
+steps = 0
 for epoch in range(1, EPOCHS+1):
     finished = False
     while not finished: # one epoch has one episode length steps
@@ -76,10 +87,14 @@ for epoch in range(1, EPOCHS+1):
 
         # sample batched experiences from the replay buffer
         obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
+        # done[rewards == -10] = 0  # for comparison (hacky)
 
         # compute future rewards
-        with torch.no_grad():
-            Q_next = agent(obs_next)  # bootstrap
+        with torch.no_grad(): # bootstrap
+            if TARGET_NET_ENABLED:
+                Q_next = agent.target_net(obs_next)
+            else:
+                Q_next = agent(obs_next)
         R = rewards + (1 - done) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
 
         # update the model
@@ -92,6 +107,11 @@ for epoch in range(1, EPOCHS+1):
         # collect some stats
         mov_loss = (.9 * mov_loss + .1 * loss.item()) if epoch > 1 else loss.item()
         history.append((loss.item(), mov_loss))
+        steps += 1
+
+        if TARGET_NET_ENABLED and steps % TARGET_NET_SYNC_STEPS == 0:
+            agent.sync_target_net()
+
 
     if epoch % 100 == 0:
         print(f"#{epoch:>4} | {loss=:.6f}, {mov_loss=:.6f}, avg_rewards={rewards.mean():.2f} ")
