@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import gymnasium as gym
-from lib.playground import play_episode, play_random
+from lib.playground import play_episode, play_steps
 
 ENV = 'FrozenLake-v1'  # slippery
 MAX_ITERATIONS = 200
@@ -99,7 +99,7 @@ for agent in agents:
     avg_rewards = []
     for i in range(1, MAX_ITERATIONS + 1):
         # learning
-        for obs, action, reward, obs_next in play_random(env, LEARNING_RANDOM_STEPS):
+        for obs, action, reward, obs_next, terminated, truncated in play_steps(env, max_steps=LEARNING_RANDOM_STEPS):
             agent.collect(obs, action, reward, obs_next)
         agent.update_values()
 

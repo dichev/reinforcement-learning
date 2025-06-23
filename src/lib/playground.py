@@ -58,18 +58,22 @@ def play_episode(env, policy):
         episode.step(obs, action, reward, obs_next, terminated)
         if terminated or truncated:
             return episode
-
         obs = obs_next
 
-def play_random(env, steps=1):
+
+def play_steps(env, max_steps=None, policy=None):
+    steps = 0
     obs, _ = env.reset()
-    for t in range(steps):
-        action = env.action_space.sample()
+    while True:
+        action = env.action_space.sample() if policy is None else policy(obs)
         obs_next, reward, terminated, truncated, _ = env.step(action)
-        yield obs, action, reward, obs_next
+        yield obs, action, reward, obs_next, terminated, truncated
         if terminated or truncated:
             obs_next, _ = env.reset()
         obs = obs_next
+        steps += 1
+        if max_steps is not None and steps >= max_steps:
+            break
 
 
 if __name__ == '__main__':
