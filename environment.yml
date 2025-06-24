@@ -18,6 +18,8 @@ dependencies:
   - einops
   - matplotlib
   - pandas
+  - pytest
+  - scipy
   - pip
   - pip:
       - autorom # and then run: AutoROM --accept-license --install-dir "$(pip show ale-py | grep -i '^Location:' | cut -d' ' -f2-)/ale_py/roms"
