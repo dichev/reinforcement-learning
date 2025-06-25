@@ -35,12 +35,12 @@ cfg = CartPoleConfig
 
 class Agent(nn.Module):
 
-    def __init__(self, state_size, n_actions):
+    def __init__(self, k_actions, n_states):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_size, cfg.HIDDEN_SIZE),
+            nn.Linear(n_states, cfg.HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Linear(cfg.HIDDEN_SIZE, n_actions),
+            nn.Linear(cfg.HIDDEN_SIZE, k_actions),
         )
 
     def forward(self, state):
@@ -50,8 +50,8 @@ class Agent(nn.Module):
     def policy(self, state):
         z = self(torch.tensor(state, dtype=torch.float))
         p = torch.softmax(z, dim=-1)
-        actions = torch.multinomial(p, num_samples=1).item()
-        return actions
+        action = torch.multinomial(p, num_samples=1).item()
+        return action
 
 
 def filter_episodes(episodes, percentile=cfg.PERCENTILE):
@@ -72,7 +72,7 @@ def filter_episodes(episodes, percentile=cfg.PERCENTILE):
 
 if __name__ == '__main__':
     env = gym.make(cfg.ENV, render_mode=None)
-    agent = Agent(env.observation_space.shape[0], env.action_space.n)
+    agent = Agent(env.action_space.n, env.observation_space.shape[0], )
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(params=agent.net.parameters(), lr=cfg.LEARN_RATE)
     writer = SummaryWriter(comment=cfg.ENV)

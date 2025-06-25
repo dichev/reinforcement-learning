@@ -6,12 +6,12 @@ def discount_returns_precise(rewards, gamma: float):
     assert rewards.dtype == torch.float, f"Expected float reward but got {rewards.dtype}"
     T, B = rewards.shape
 
-    G = torch.empty_like(rewards)
-    g = torch.tensor(0., device=rewards.device)
+    returns = torch.empty_like(rewards)
+    G = torch.tensor(0., device=rewards.device)
     for t in range(T-1, -1, -1): # reversed(range(T)) but jit friendly
-        g = rewards[t, :] + gamma * g
-        G[t, :] = g
-    return G
+        G = rewards[t, :] + gamma * G
+        returns[t, :] = G
+    return returns
 
 
 def discount_returns(rewards, gamma):
