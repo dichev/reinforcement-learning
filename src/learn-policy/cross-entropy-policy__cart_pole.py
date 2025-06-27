@@ -85,12 +85,12 @@ if __name__ == '__main__':
             elite_preserved = elite = elite[:cfg.BATCH_SIZE]
 
         observations, actions, _, _, _ = zip(*[ep.as_tensors() for ep in elite])
-        obs = torch.cat(observations)  # T, D
-        actions = torch.cat(actions)   # T
+        obs = torch.cat(observations)  # T, S
+        actions = torch.cat(actions)   # T, 1
 
         optimizer.zero_grad()
-        z = agent(obs)
-        loss = loss_fn(z, actions)
+        z = agent(obs)                 # T, A
+        loss = loss_fn(z, actions.squeeze())
         loss.backward()
         optimizer.step()
 

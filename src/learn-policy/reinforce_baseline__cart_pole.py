@@ -66,8 +66,8 @@ if __name__ == '__main__':
     avg_reward = 0
     for epoch in range(1, cfg.EPOCHS+1):
         episode = play_episode(env, agent.policy)
-        obs, actions, rewards, obs_next, done = episode.as_tensors()
-        returns = discount_returns(rewards.view(-1, 1), cfg.GAMMA)
+        obs, actions, rewards, obs_next, _ = episode.as_tensors()
+        returns = discount_returns(rewards, cfg.GAMMA)
 
         # Train the value baseline
         optimizer_value.zero_grad()
@@ -81,7 +81,7 @@ if __name__ == '__main__':
         optimizer.zero_grad()
         z = agent(obs)                                  # T, A
         logp = F.log_softmax(z, dim=-1)                 # T, A
-        logp_a = logp.gather(-1, actions.view(-1, 1))   # T, 1
+        logp_a = logp.gather(-1, actions)               # T, 1
         loss = -(logp_a * (returns - baseline)).mean()
         loss.backward()
         optimizer.step()

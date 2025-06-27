@@ -23,11 +23,13 @@ class Episode:
         self.done = done
 
     def as_tensors(self, device=None):
-        obs = torch.tensor(np.stack(self.observations), device=device)
-        actions = torch.tensor(self.actions, device=device)
-        rewards = torch.tensor(self.rewards, device=device)
-        obs_next = torch.tensor(np.stack(self.observations), device=device)
-        done = torch.tensor(self.done, device=device, dtype=torch.long)
+        T = self.steps
+        obs = torch.tensor(np.stack(self.observations), device=device)         # T, S
+        actions = torch.tensor(self.actions, device=device).view(T, 1)         # T, 1
+        rewards = torch.tensor(self.rewards, device=device).view(T, 1)         # T, 1
+        obs_next = torch.tensor(np.stack(self.observations), device=device)    # T, S
+        done = torch.zeros((T, 1), device=device, dtype=torch.long)            # T, 1
+        done[-1] = self.done                                                   # where only the last step can be terminal
         return obs, actions, rewards, obs_next, done
 
     def as_trajectory(self):
