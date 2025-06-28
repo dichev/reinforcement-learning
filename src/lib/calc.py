@@ -59,10 +59,12 @@ def discount_n_steps(rewards, gamma, n):  # ignores rewards past n future steps
 
 
 if __name__ == '__main__':
-    import timeit
-    print('Discount Precise:   ', timeit.timeit(lambda : discount_returns_loop(torch.randn(1000, 2), .99), number=100, globals=globals()))
-    print('Discount Vectorized:', timeit.timeit(lambda : discount_returns(torch.randn(1000, 2), .99), number=100, globals=globals()))
+    from lib.utils import measure
+
+    measure('Discount Precise   ', lambda : discount_returns_loop(torch.randn(1000, 2), .99))
+    measure('Discount Vectorized', lambda : discount_returns(torch.randn(1000, 2), .99))
     print('-------------------------------------------------------------')
-    print('N-step discount Loop:      ', timeit.timeit(lambda : discount_n_steps_loop(torch.randn(1000, 2), .99, n=100), number=100, globals=globals()))
-    print('N-step discount Vectorized:', timeit.timeit(lambda : discount_n_steps(torch.randn(1000, 2), .99, n=100), number=100, globals=globals()))
+    measure('N-step discount Loop      ', lambda : discount_n_steps_loop(torch.randn(1000, 2), .99, n=100))
+    measure('N-step discount Vectorized', lambda : discount_n_steps(torch.randn(1000, 2), .99, n=100))
+
 
