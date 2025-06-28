@@ -7,17 +7,19 @@ from torch.utils.tensorboard import SummaryWriter
 
 from lib.playground import play_episode
 from lib.tracking import writer_add_params
-from lib.calc import discount_returns
+from lib.calc import discount_n_steps
 from lib.utils import now
 
 class cfg:
     EPOCHS = 3000
-    LR_ACTOR  = .001
-    LR_CRITIC = .0001
+    LR_ACTOR  = .01
+    LR_CRITIC = .001
+    N_STEPS_BOOTSTRAP = 10 # bootstrap after N steps
     GAMMA = .99  # 1 is actually better for such episodic tasks
     HIDDEN_SIZE = 128
     ENV = 'CartPole-v1'
     ENV_GOAL = 480  # avg reward
+    ENV_MAX_STEPS = 500
 
 
 class Actor(nn.Module):
@@ -54,34 +56,32 @@ class Critic(nn.Module):
         return self.net(state)
 
 
-
 if __name__ == '__main__':
     env = gym.make(cfg.ENV, render_mode=None)
     actor = Actor(env.action_space.n, env.observation_space.shape[0])
     optimizer_actor = optim.Adam(params=actor.net.parameters(), lr=cfg.LR_ACTOR)
     critic = Critic(env.observation_space.shape[0])
     optimizer_critic = optim.Adam(params=critic.parameters(), lr=cfg.LR_CRITIC)
-    writer = SummaryWriter(f'runs/A2C {now()}', flush_secs=2)
+    writer = SummaryWriter(f'runs/A2C n_step={cfg.N_STEPS_BOOTSTRAP} {now()}', flush_secs=2)
 
     avg_reward = 0
     for epoch in range(1, cfg.EPOCHS+1):
         episode = play_episode(env, actor.policy)
         obs, actions, rewards, obs_next, done = episode.as_tensors()
 
-        # TODO: NOT LEARNING
-
         # Train the critic
         optimizer_critic.zero_grad()
         values = critic(obs)
-        with torch.no_grad():
-            values_next = critic(obs_next)
-        returns = rewards + cfg.GAMMA * values_next * (1 - done)  # One-step actor–critic methods replace the full return of REINFORCE with the one-step return (and use a learned state-value function as the baseline)
+        n, T = cfg.N_STEPS_BOOTSTRAP, episode.steps
+        returns = discount_n_steps(rewards, cfg.GAMMA, n)                      # ignores rewards past n future steps
+        if n <= T:                                                             # G_t = R_{t+1} + γ R_{t+2} + ... + γ^{n-1} R_{t+n}
+            returns[:T-n] += (cfg.GAMMA ** n) * values[n:] * (1 - done[:T-n])  # note: assumes that only the last step can be terminal: assert (done[:T-1]==0).all()
         loss_critic = F.mse_loss(values, returns.detach())
         loss_critic.backward()
         optimizer_critic.step()
 
 
-        # Train the actor (with one-step critic value)
+        # Train the actor (with N-step critic value)
         returns, baseline = returns.detach(), values.detach()   # the advantage must be treated as a constant, so detach them just in case (the actor's gradients must not flow to the critic)
         optimizer_actor.zero_grad()
         z = actor(obs)                                  # T, A
@@ -91,8 +91,8 @@ if __name__ == '__main__':
         loss_actor.backward()
         optimizer_actor.step()
 
-        avg_reward = (.9 * avg_reward + .1 * episode.total_rewards) if epoch > 1 else episode.total_rewards
 
+        avg_reward = (.9 * avg_reward + .1 * episode.total_rewards) if epoch > 1 else episode.total_rewards
         writer.add_scalar('t/Total reward (also episode length)', episode.total_rewards, epoch)
         writer.add_scalar('t/Return at step 0', returns[0], epoch)
         if epoch % 100 == 0:

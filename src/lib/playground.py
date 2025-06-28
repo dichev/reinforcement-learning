@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from collections import deque
-import random
+import random, math
 
 class Episode:
     def __init__(self):
@@ -89,14 +89,14 @@ def batched_episodes(env, policy, num_episodes):
         yield batch
 
 @torch.no_grad()
-def play_episode(env, policy):
+def play_episode(env, policy, max_steps=math.inf):
     episode = Episode()
     obs, _ = env.reset()
     while True:
         action = policy(obs)
         obs_next, reward, terminated, truncated, _ = env.step(action)
         episode.step(obs, action, reward, obs_next, terminated)
-        if terminated or truncated:
+        if terminated or truncated or episode.steps >= max_steps:
             return episode
         obs = obs_next
 

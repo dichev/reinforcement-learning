@@ -22,7 +22,7 @@ def discount_n_steps_loop(rewards, gamma: float, n: int):  # ignores rewards pas
 
     discounts = gamma ** torch.arange(n, device=rewards.device, dtype=torch.float).view(n, 1)
     returns = torch.empty_like(rewards)
-    for t in range(T):  # G_t = R_{t+1} + γ R_{t+2} + ... γ^{n-1} R_{t+n}
+    for t in range(T):  # G_t = R_{t+1} + γ R_{t+2} + ... + γ^{n-1} R_{t+n}
         end = min(t + n, T)
         returns[t] = (rewards[t:end] * discounts[:end - t]).sum(dim=0)
 

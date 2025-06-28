@@ -72,7 +72,7 @@ if __name__ == '__main__':
         # Train the value baseline
         optimizer_value.zero_grad()
         values = value_net(obs)
-        loss_value = F.mse_loss(returns, values)
+        loss_value = F.mse_loss(values, returns)
         loss_value.backward()
         optimizer_value.step()
 
