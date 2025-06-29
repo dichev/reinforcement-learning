@@ -19,7 +19,6 @@ class cfg:
     HIDDEN_SIZE = 128
     ENV = 'CartPole-v1'
     ENV_GOAL = 480  # avg reward
-    ENV_MAX_STEPS = 500
 
 
 class Actor(nn.Module):
@@ -74,9 +73,10 @@ if __name__ == '__main__':
         values = critic(obs)
         n, T = cfg.N_STEPS_BOOTSTRAP, episode.steps
         returns = discount_n_steps(rewards, cfg.GAMMA, n)                      # ignores rewards past n future steps
-        if n <= T:                                                             # G_t = R_{t+1} + γ R_{t+2} + ... + γ^{n-1} R_{t+n}
-            returns[:T-n] += (cfg.GAMMA ** n) * values[n:] * (1 - done[:T-n])  # note: assumes that only the last step can be terminal: assert (done[:T-1]==0).all()
-        loss_critic = F.mse_loss(values, returns.detach())
+        if n <= T:                                                             # G_t = [R_{t+1} + γ R_{t+2} + ... + γ^{n-1} R_{t+n}] + γ^n V(s_{t+n})
+            bootstrap = values[n:].detach()                                    # lookup 1 step ahead for each step
+            returns[:T-n] +=  (cfg.GAMMA ** n) * bootstrap * (1 - done[:T-n])  # note: assumes that only the last step can be terminal: assert (done[:T-1]==0).all()
+        loss_critic = F.mse_loss(values, returns)
         loss_critic.backward()
         optimizer_critic.step()
 
