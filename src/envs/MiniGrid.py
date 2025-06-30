@@ -1,5 +1,4 @@
 import gymnasium as gym
-from gymnasium.envs.registration import register
 from minigrid.wrappers import ImgObsWrapper, FullyObsWrapper
 from lib.playground import play_episode
 

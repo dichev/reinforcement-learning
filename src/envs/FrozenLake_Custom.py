@@ -1,6 +1,5 @@
 import gymnasium as gym
-from gymnasium.envs.registration import register
-from envs.wrappers import StepPenaltyWrapper, DiscreteOneHotWrapper, DiscountedRewardWrapper
+from envs.wrappers import DiscreteOneHotWrapper, DiscountedRewardWrapper
 from lib.playground import play_episode
 
 

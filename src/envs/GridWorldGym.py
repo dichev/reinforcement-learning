@@ -1,6 +1,5 @@
 import gymnasium as gym
 import numpy as np
-from gymnasium.envs.registration import register
 from envs.external.GridWorld import GridWorld
 
 class GridWorldGym(gym.Env):
@@ -56,12 +55,9 @@ class GridWorldGym(gym.Env):
         print(self.game.display())
 
 
-env_id = 'custom/GridWorldGym'
-if env_id not in gym.envs.registry:
-    register(id=env_id, entry_point=GridWorldGym)
-
 
 if __name__ == '__main__':
+    import envs.custom_gyms
     from lib.playground import play_episode
     # env = GridWorldGym(size=4, mode='random', noise=0.01, render_mode='human')
     env = gym.make('custom/GridWorldGym', size=4, mode='random', noise=0.01, render_mode='human')
