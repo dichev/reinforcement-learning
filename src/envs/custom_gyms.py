@@ -15,3 +15,7 @@ register(
     entry_point='src.envs.GridWorldGym:GridWorldGym'
 )
 
+register(
+    id='custom/Pong',
+    entry_point='src.envs.external.AtariWrappers:make_pong'
+)

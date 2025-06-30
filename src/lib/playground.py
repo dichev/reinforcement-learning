@@ -66,10 +66,10 @@ class ReplayBuffer:
         batch = random.sample(self.steps, batch_size)
         obs, actions, rewards, obs_next, done = zip(*batch)
 
-        obs = torch.tensor(np.stack(obs), dtype=torch.float, device=device).view(batch_size, -1)
+        obs = torch.tensor(np.stack(obs), dtype=torch.float, device=device)
         actions = torch.tensor(actions, dtype=torch.long, device=device).view(batch_size, -1)
         rewards = torch.tensor(rewards, dtype=torch.float, device=device).view(batch_size, -1)
-        obs_next = torch.tensor(np.stack(obs_next), dtype=torch.float, device=device).view(batch_size, -1)
+        obs_next = torch.tensor(np.stack(obs_next), dtype=torch.float, device=device)
         done = torch.tensor(done, dtype=torch.long, device=device).view(batch_size, -1)
 
         return obs, actions, rewards, obs_next, done
