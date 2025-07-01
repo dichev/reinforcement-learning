@@ -77,13 +77,13 @@ class AtariPreprocessing(gym.ObservationWrapper):
         super().__init__(env)
         self.observation_space = gym.spaces.Box(low=-1., high=1., shape=(3, IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
 
-    def observation(self, obs):
-        assert np.mean(obs) > .01
+    def observation(self, ob):
+        assert np.mean(ob) > .01
 
-        obs = cv2.resize(obs, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_NEAREST)
-        obs = np.moveaxis(obs, 2, 0).astype(np.float32)
-        obs = obs * 2. / 255. - 1.  # normalize [-1, 1]
-        return obs
+        ob = cv2.resize(ob, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_NEAREST)
+        ob = np.moveaxis(ob, 2, 0).astype(np.float32)
+        ob = ob * 2. / 255. - 1.  # normalize [-1, 1]
+        return ob
 
 
 def batches(envs, batch_size):
@@ -94,8 +94,8 @@ def batches(envs, batch_size):
         for _ in range(batch_size):
             env = random.choice(envs)
             action = env.action_space.sample()
-            obs, reward, terminated, truncated, info = env.step(action)
-            batch.append(obs)
+            ob, reward, terminated, truncated, info = env.step(action)
+            batch.append(ob)
             if terminated or truncated:
                 env.reset()
 

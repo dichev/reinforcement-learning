@@ -47,8 +47,8 @@ class ReplayBuffer:
         self._last_rewards = []
         self._episodes = 0
 
-    def add(self, obs, action, reward, obs_next, terminated, truncated=None):
-        exp = Exp(obs, action, reward, obs_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
+    def add(self, ob, action, reward, ob_next, terminated, truncated=None):
+        exp = Exp(ob, action, reward, ob_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
         self.experiences.append(exp)
         self._last_rewards.append(reward)
         if terminated or truncated:
@@ -93,26 +93,26 @@ def batched_episodes(env, policy, num_episodes):
 @torch.no_grad()
 def play_episode(env, policy, max_steps=math.inf):
     episode = Episode()
-    obs, _ = env.reset()
+    ob, _ = env.reset()
     while True:
-        action = policy(obs)
-        obs_next, reward, terminated, truncated, _ = env.step(action)
-        episode.step(obs, action, reward, obs_next, terminated)
+        action = policy(ob)
+        ob_next, reward, terminated, truncated, _ = env.step(action)
+        episode.step(ob, action, reward, ob_next, terminated)
         if terminated or truncated or len(episode) >= max_steps:
             return episode
-        obs = obs_next
+        ob = ob_next
 
 
 def play_steps(env, max_steps=None, policy=None):
     steps = 0
-    obs, _ = env.reset()
+    ob, _ = env.reset()
     while True:
-        action = env.action_space.sample() if policy is None else policy(obs)
-        obs_next, reward, terminated, truncated, _ = env.step(action)
-        yield obs, action, reward, obs_next, terminated, truncated
+        action = env.action_space.sample() if policy is None else policy(ob)
+        ob_next, reward, terminated, truncated, _ = env.step(action)
+        yield ob, action, reward, ob_next, terminated, truncated
         if terminated or truncated:
-            obs_next, _ = env.reset()
-        obs = obs_next
+            ob_next, _ = env.reset()
+        ob = ob_next
         steps += 1
         if max_steps is not None and steps >= max_steps:
             break
@@ -135,7 +135,7 @@ def evaluate_policy_agent(env, agent, n_episodes, device=None):
 if __name__ == '__main__':
     import gymnasium as gym
     env = gym.make("CartPole-v1", render_mode="human")
-    episode = play_episode(env, lambda obs: env.action_space.sample())
+    episode = play_episode(env, lambda ob: env.action_space.sample())
     print(f"Episode finished with reward {episode.total_rewards}")
     replay = ReplayBuffer(capacity=1000)
     replay.add(episode)

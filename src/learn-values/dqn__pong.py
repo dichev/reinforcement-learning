@@ -29,7 +29,6 @@ TARGET_NET_SYNC_STEPS = 1_000
 EVAL_NUM_EPISODES = 10
 
 
-
 class DQNAgent(nn.Module):
     def __init__(self, k_actions, n_frames, eps=EPS['INITIAL']):
         super().__init__()
@@ -78,8 +77,8 @@ agent_target = copy.deepcopy(agent).requires_grad_(False)
 print(f"Initial filling replay buffer:")
 exp_iterator = play_steps(env, policy=agent.policy)
 while len(replay) < REPLAY_SIZE_START:
-    obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-    replay.add(obs, action, reward, obs_next, terminated, truncated)
+    ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
+    replay.add(ob, action, reward, ob_next, terminated, truncated)
     if len(replay) % 1000 == 0: print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
 
 
@@ -93,8 +92,8 @@ while True:
     agent.eps = torch.tensor(max(EPS['FINAL'], EPS['INITIAL'] - steps / EPS['DURATION']))  # linear scheduler
 
     # collect new experience
-    obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-    replay.add(obs, action, reward, obs_next, terminated, truncated)
+    ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
+    replay.add(ob, action, reward, ob_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
     obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)

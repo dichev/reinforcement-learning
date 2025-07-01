@@ -64,8 +64,8 @@ if TARGET_NET_ENABLED:
 print(f"Initial filling replay buffer:")
 exp_iterator = play_steps(env, policy=agent.policy)
 while len(replay) < BATCH_SIZE:
-    obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-    replay.add(obs, action, reward, obs_next, terminated, truncated)
+    ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
+    replay.add(ob, action, reward, ob_next, terminated, truncated)
 print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
 
 
@@ -77,8 +77,8 @@ for epoch in range(1, EPOCHS+1):
     finished = False
     while not finished: # one epoch has one episode length steps
         # collect new experience
-        obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-        replay.add(obs, action, reward, obs_next, terminated, truncated)
+        ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
+        replay.add(ob, action, reward, ob_next, terminated, truncated)
         finished = terminated or truncated
 
         # sample batched experiences from the replay buffer

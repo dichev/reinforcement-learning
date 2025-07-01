@@ -99,15 +99,15 @@ for agent in agents:
     avg_rewards = []
     for i in range(1, MAX_ITERATIONS + 1):
         # learning
-        for obs, action, reward, obs_next, terminated, truncated in play_steps(env, max_steps=LEARNING_RANDOM_STEPS):
-            agent.collect(obs, action, reward, obs_next)
+        for ob, action, reward, ob_next, terminated, truncated in play_steps(env, max_steps=LEARNING_RANDOM_STEPS):
+            agent.collect(ob, action, reward, ob_next)
         agent.update_values()
 
         # testing
         episodes = [play_episode(env, agent.policy) for _ in range(TEST_EPISODES)]
         for e in episodes:
-            for obs, action, reward, obs_next, _ in e.experiences:
-                agent.collect(obs, action, reward, obs_next)
+            for ob, action, reward, ob_next, _ in e.experiences:
+                agent.collect(ob, action, reward, ob_next)
 
         avg_reward = sum([ep.total_rewards for ep in episodes]) / TEST_EPISODES
         avg_rewards.append(avg_reward)
