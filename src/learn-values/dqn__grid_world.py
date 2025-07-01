@@ -24,7 +24,7 @@ TARGET_NET_SYNC_STEPS = 50
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_states, hidden_size=HIDDEN_SIZE, eps=EPS_GREEDY, use_target_net=TARGET_NET_ENABLED):
+    def __init__(self, k_actions, n_states, hidden_size=HIDDEN_SIZE, eps=EPS_GREEDY):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(n_states, hidden_size),
@@ -33,19 +33,13 @@ class DQNAgent(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, k_actions),
         )
-        if use_target_net:
-            self.target_net = copy.deepcopy(self.net)
-            self.target_net.requires_grad_(False)
-
         self.eps = eps
         self.k_actions = k_actions
         self.n_states = n_states
 
     def forward(self, state):
-        return self.net(state)  # B, S  ->  B, A
-
-    def sync_target_net(self):
-        self.target_net.load_state_dict(self.net.state_dict())
+        state = state.view(state.shape[0], -1)      # B, *S -> B, S
+        return self.net(state)                      # B, S  -> B, A
 
     @torch.no_grad()
     def policy(self, state, greedy=False):
@@ -63,6 +57,8 @@ agent = DQNAgent(env.action_space.n, state_size).to(DEVICE)
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
+if TARGET_NET_ENABLED:
+    agent_target = copy.deepcopy(agent).requires_grad_(False)
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer with {BATCH_SIZE} episodes")
@@ -92,7 +88,7 @@ for epoch in range(1, EPOCHS+1):
         # compute future rewards
         with torch.no_grad(): # bootstrap
             if TARGET_NET_ENABLED:
-                Q_next = agent.target_net(obs_next)
+                Q_next = agent_target(obs_next)
             else:
                 Q_next = agent(obs_next)
         R = rewards + (1 - done) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
@@ -110,7 +106,7 @@ for epoch in range(1, EPOCHS+1):
         steps += 1
 
         if TARGET_NET_ENABLED and steps % TARGET_NET_SYNC_STEPS == 0:
-            agent.sync_target_net()
+            agent_target.load_state_dict(agent.state_dict())
 
 
     if epoch % 100 == 0:
