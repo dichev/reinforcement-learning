@@ -18,13 +18,7 @@ class Episode:
         self.done = done
 
     def as_tensors(self, device=None):
-        T = len(self.experiences)
-        obs, actions, rewards, obs_next, done = zip(*self.experiences)
-        obs = torch.tensor(np.stack(obs), device=device)                  # T, *S
-        actions = torch.tensor(actions, device=device).view(T, 1)         # T, 1
-        rewards = torch.tensor(rewards, device=device).view(T, 1)         # T, 1
-        obs_next = torch.tensor(np.stack(obs_next), device=device)        # T, *S
-        done = torch.tensor(np.stack(done), device=device).view(T, 1)     # T, 1
+        obs, actions, rewards, obs_next, done = to_tensors(self.experiences)
         return obs, actions, rewards, obs_next, done
 
     def __len__(self):
@@ -57,14 +51,7 @@ class ReplayBuffer:
     def sample(self, batch_size, device=None):
         assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
         batch = random.sample(self.experiences, batch_size)
-        obs, actions, rewards, obs_next, done = zip(*batch)
-
-        obs = torch.tensor(np.stack(obs), dtype=torch.float, device=device)
-        actions = torch.tensor(actions, dtype=torch.long, device=device).view(batch_size, -1)
-        rewards = torch.tensor(rewards, dtype=torch.float, device=device).view(batch_size, -1)
-        obs_next = torch.tensor(np.stack(obs_next), dtype=torch.float, device=device)
-        done = torch.tensor(done, dtype=torch.long, device=device).view(batch_size, -1)
-
+        obs, actions, rewards, obs_next, done = to_tensors(batch, device=device)
         return obs, actions, rewards, obs_next, done
 
     def _update_stats(self):
@@ -82,6 +69,16 @@ class ReplayBuffer:
     def __repr__(self):
         return f'ReplayBuffer(size={len(self)}, capacity={self.capacity})'
 
+
+def to_tensors(experiences: list[Exp], device=None): # unified tensor formats
+    obs, actions, rewards, obs_next, done = zip(*experiences)
+    T = len(experiences)
+    obs      = torch.tensor(np.stack(obs),      dtype=torch.float, device=device)              # T, *S
+    actions  = torch.tensor(actions,            dtype=torch.long,  device=device).view(T, 1)   # T, 1
+    rewards  = torch.tensor(rewards,            dtype=torch.float, device=device).view(T, 1)   # T, 1
+    obs_next = torch.tensor(np.stack(obs_next), dtype=torch.float, device=device)              # T, *S
+    done     = torch.tensor(np.stack(done),     dtype=torch.long,  device=device).view(T, 1)   # T, 1
+    return obs, actions, rewards, obs_next, done
 
 
 @torch.no_grad()
@@ -125,7 +122,7 @@ def evaluate_policy_agent(env, agent, n_episodes, device=None):
         episode = play_episode(env, agent.policy)
         scores += episode.total_rewards
         episode_length += len(episode)
-        obs = torch.tensor(np.stack([exp[0] for exp in episode.experiences]), device=device)
+        obs = torch.tensor(np.stack([exp[0] for exp in episode.experiences]), device=device, dtype=torch.float)
         Q_max = agent(obs).max(dim=-1)[0].mean().item()  # max Q values averaged over each episode
         values += Q_max
     score, episode_length, value = [s/n_episodes for s in (scores, episode_length, values)]
