@@ -36,6 +36,5 @@ if __name__ == '__main__':
     env = gym.make('custom/MiniGrid', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)
-    print(episode.observations[-1])
     env.close()
 

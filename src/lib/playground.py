@@ -1,57 +1,44 @@
 import torch
 import numpy as np
-from collections import deque
+from collections import deque, namedtuple
 import random, math
+
+Exp = namedtuple('Exp', field_names=['ob', 'action', 'reward', 'ob_next', 'done'])
 
 class Episode:
     def __init__(self):
-        self.actions = []
-        self.rewards = []
-        self.observations = []
-        self.observations_next = []
+        self.experiences = []
         self.total_rewards = 0
-        self.steps = 0
         self.done = False
 
     def step(self, obs, action, reward, obs_next, done):
-        self.observations.append(obs)
-        self.observations_next.append(obs_next)
-        self.actions.append(action)
-        self.rewards.append(reward)
+        exp = Exp(obs, action, reward, obs_next, done)
+        self.experiences.append(exp)
         self.total_rewards += reward
-        self.steps += 1
         self.done = done
 
     def as_tensors(self, device=None):
-        T = self.steps
-        obs = torch.tensor(np.stack(self.observations), device=device)         # T, S
-        actions = torch.tensor(self.actions, device=device).view(T, 1)         # T, 1
-        rewards = torch.tensor(self.rewards, device=device).view(T, 1)         # T, 1
-        obs_next = torch.tensor(np.stack(self.observations), device=device)    # T, S
-        done = torch.zeros((T, 1), device=device, dtype=torch.long)            # T, 1
-        done[-1] = self.done                                                   # where only the last step can be terminal
+        T = len(self.experiences)
+        obs, actions, rewards, obs_next, done = zip(*self.experiences)
+        obs = torch.tensor(np.stack(obs), device=device)                  # T, *S
+        actions = torch.tensor(actions, device=device).view(T, 1)         # T, 1
+        rewards = torch.tensor(rewards, device=device).view(T, 1)         # T, 1
+        obs_next = torch.tensor(np.stack(obs_next), device=device)        # T, *S
+        done = torch.tensor(np.stack(done), device=device).view(T, 1)     # T, 1
         return obs, actions, rewards, obs_next, done
 
-    def as_trajectory(self):
-        for i in range(self.steps):
-            obs = self.observations[i]
-            action = self.actions[i]
-            reward = self.rewards[i]
-            obs_next = self.observations_next[i]
-            done = self.done if (i == self.steps - 1) else False
-            yield obs, action, reward, obs_next, done
-
+    def __len__(self):
+        return len(self.experiences)
 
     def __repr__(self):
-        return f'Episode(steps={self.steps}, total_rewards={self.total_rewards}, done={self.done})'
+        return f'Episode(steps={len(self)}, total_rewards={self.total_rewards}, done={self.done})'
 
 
 
 class ReplayBuffer:
-
     def __init__(self, capacity):
         self.capacity = capacity
-        self.steps = deque(maxlen=capacity)
+        self.experiences = deque(maxlen=capacity)
         self.stats = {
             'avg_score': 0.,
             'best_score': 0.,
@@ -61,18 +48,19 @@ class ReplayBuffer:
         self._episodes = 0
 
     def add(self, episode: Episode):
-        for obs, action, reward, obs_next, done in episode.as_trajectory():
-            self.add_step(obs, action, reward, obs_next, done, False)
+        for obs, action, reward, obs_next, done in episode.experiences:
+            self.add_step(obs, action, reward, obs_next, done, False) # note: we ignore truncated states, since the agent shouldn't treat them as done state
 
     def add_step(self, obs, action, reward, obs_next, terminated, truncated):
-        self.steps.append((obs, action, reward, obs_next, terminated))
+        exp = Exp(obs, action, reward, obs_next, terminated)
+        self.experiences.append(exp)
         self._last_rewards.append(reward)
         if terminated or truncated:
             self._update_stats()
 
     def sample(self, batch_size, device=None):
-        assert len(self.steps) >= batch_size, f"Replay buffer has {len(self.steps)} steps, but batch_size={batch_size}"
-        batch = random.sample(self.steps, batch_size)
+        assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
+        batch = random.sample(self.experiences, batch_size)
         obs, actions, rewards, obs_next, done = zip(*batch)
 
         obs = torch.tensor(np.stack(obs), dtype=torch.float, device=device)
@@ -92,13 +80,11 @@ class ReplayBuffer:
         self._episodes += 1
         self._last_rewards.clear()
 
-
-    @property
-    def size(self):
-        return len(self.steps)
+    def __len__(self):
+        return len(self.experiences)
 
     def __repr__(self):
-        return f'ReplayBuffer(size={self.size}, capacity={self.capacity})'
+        return f'ReplayBuffer(size={len(self)}, capacity={self.capacity})'
 
 
 
@@ -116,7 +102,7 @@ def play_episode(env, policy, max_steps=math.inf):
         action = policy(obs)
         obs_next, reward, terminated, truncated, _ = env.step(action)
         episode.step(obs, action, reward, obs_next, terminated)
-        if terminated or truncated or episode.steps >= max_steps:
+        if terminated or truncated or len(episode) >= max_steps:
             return episode
         obs = obs_next
 
@@ -138,12 +124,16 @@ def play_steps(env, max_steps=None, policy=None):
 
 @torch.no_grad()
 def evaluate_policy_agent(env, agent, n_episodes, device=None):
-    episodes = [play_episode(env, agent.policy) for _ in range(n_episodes)]
-    score = sum(ep.total_rewards for ep in episodes) / n_episodes
-    episode_length = sum(ep.steps for ep in episodes) / n_episodes
-    observations = [np.stack(ep.observations) for ep in episodes]
-    values = sum(agent(torch.tensor(obs, device=device, dtype=torch.float)).max(dim=-1)[0].mean().item() for obs in observations) / n_episodes  # max Q values averaged over each episode
-    return score, episode_length, values
+    values = scores = episode_length = 0
+    for i in range(n_episodes):
+        episode = play_episode(env, agent.policy)
+        scores += episode.total_rewards
+        episode_length += len(episode)
+        obs = torch.tensor(np.stack([exp[0] for exp in episode.experiences]), device=device)
+        Q_max = agent(obs).max(dim=-1)[0].mean().item()  # max Q values averaged over each episode
+        values += Q_max
+    score, episode_length, value = [s/n_episodes for s in (scores, episode_length, values)]
+    return score, episode_length, value
 
 
 if __name__ == '__main__':
@@ -151,8 +141,6 @@ if __name__ == '__main__':
     env = gym.make("CartPole-v1", render_mode="human")
     episode = play_episode(env, lambda obs: env.action_space.sample())
     print(f"Episode finished with reward {episode.total_rewards}")
-    trajectory = list(episode.as_trajectory())
-    print(trajectory)
     replay = ReplayBuffer(capacity=1000)
     replay.add(episode)
     print(replay)

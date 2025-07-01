@@ -77,10 +77,10 @@ agent_target = copy.deepcopy(agent).requires_grad_(False)
 # Initial replay buffer fill
 print(f"Initial filling replay buffer:")
 exp_iterator = play_steps(env, policy=agent.policy)
-while replay.size < REPLAY_SIZE_START:
+while len(replay) < REPLAY_SIZE_START:
     obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
     replay.add_step(obs, action, reward, obs_next, terminated, truncated)
-    if replay.size % 1000 == 0: print(f"-> Replay buffer size: {replay.size}/{replay.capacity}")
+    if len(replay) % 1000 == 0: print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
 
 
 # Training loop

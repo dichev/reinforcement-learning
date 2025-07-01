@@ -62,7 +62,7 @@ if TARGET_NET_ENABLED:
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer with {BATCH_SIZE} episodes")
-while replay.size < BATCH_SIZE:
+while len(replay) < BATCH_SIZE:
     episode = play_episode(env, agent.policy)
     replay.add(episode)
 

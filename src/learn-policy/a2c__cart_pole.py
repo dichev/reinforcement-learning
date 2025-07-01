@@ -71,7 +71,7 @@ if __name__ == '__main__':
         # Train the critic
         optimizer_critic.zero_grad()
         values = critic(obs)
-        n, T = cfg.N_STEPS_BOOTSTRAP, episode.steps
+        n, T = cfg.N_STEPS_BOOTSTRAP, len(episode)
         returns = discount_n_steps(rewards, cfg.GAMMA, n)                      # ignores rewards past n future steps
         if n <= T:                                                             # G_t = [R_{t+1} + γ R_{t+2} + ... + γ^{n-1} R_{t+n}] + γ^n V(s_{t+n})
             bootstrap = values[n:].detach()                                    # lookup 1 step ahead for each step
