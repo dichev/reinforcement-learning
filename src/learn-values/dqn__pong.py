@@ -24,14 +24,13 @@ REPLAY_SIZE_START = 10_000
 BATCH_SIZE = 32   # steps
 LOG_STEP = 100
 DEVICE = 'cuda'
-TARGET_NET_ENABLED = True
 TARGET_NET_SYNC_STEPS = 1_000
 EVAL_NUM_EPISODES = 10
 
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_frames, eps=EPS['INITIAL'], use_target_net=TARGET_NET_ENABLED):
+    def __init__(self, k_actions, n_frames, eps=EPS['INITIAL']):
         super().__init__()
         self.net = nn.Sequential(                                                         # in:  n, 84, 84
             nn.Conv2d(in_channels=n_frames, out_channels=32, kernel_size=8, stride=4),    # ->  32, 20, 20
@@ -45,10 +44,6 @@ class DQNAgent(nn.Module):
             nn.ReLU(),
             nn.Linear(512, k_actions)                                          # -> k_actions
         )
-        if use_target_net:
-            self.target_net = copy.deepcopy(self.net)
-            self.target_net.requires_grad_(False)
-
         self.k_actions = k_actions
         self.frames = n_frames
         self.register_buffer('eps', torch.tensor(eps))
@@ -56,9 +51,6 @@ class DQNAgent(nn.Module):
     def forward(self, state):
         B, C, H, W = state.shape
         return self.net(state)  # B, A
-
-    def sync_target_net(self):
-        self.target_net.load_state_dict(self.net.state_dict())
 
     @torch.no_grad()
     def policy(self, state, greedy=False):
@@ -78,6 +70,7 @@ loss_fn = nn.MSELoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
 writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
+agent_target = copy.deepcopy(agent).requires_grad_(False)
 
 
 # Initial replay buffer fill
@@ -90,7 +83,7 @@ while replay.size < REPLAY_SIZE_START:
 
 
 # Training loop
-print(f"Training.. Target network: {TARGET_NET_ENABLED}")
+print(f"Training..")
 mov_loss = 0
 steps = 0
 ts = time.time()
@@ -107,10 +100,7 @@ while True:
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
-        if TARGET_NET_ENABLED:
-            Q_next = agent.target_net(obs_next)
-        else:
-            Q_next = agent(obs_next)
+        Q_next = agent_target(obs_next)
     R = rewards + (1 - done) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
 
     # update the model
@@ -122,8 +112,8 @@ while True:
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
 
     # sync target network
-    if TARGET_NET_ENABLED and steps % TARGET_NET_SYNC_STEPS == 0:
-        agent.sync_target_net()
+    if steps % TARGET_NET_SYNC_STEPS == 0:
+        agent_target.load_state_dict(agent.state_dict())
 
 
     # Collect some stats
