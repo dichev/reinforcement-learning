@@ -38,7 +38,8 @@ class Episode:
             action = self.actions[i]
             reward = self.rewards[i]
             obs_next = self.observations_next[i]
-            yield obs, action, reward, obs_next, self.done
+            done = self.done if (i == self.steps - 1) else False
+            yield obs, action, reward, obs_next, done
 
 
     def __repr__(self):
