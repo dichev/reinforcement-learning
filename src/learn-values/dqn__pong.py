@@ -79,7 +79,7 @@ print(f"Initial filling replay buffer:")
 exp_iterator = play_steps(env, policy=agent.policy)
 while len(replay) < REPLAY_SIZE_START:
     obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-    replay.add_step(obs, action, reward, obs_next, terminated, truncated)
+    replay.add(obs, action, reward, obs_next, terminated, truncated)
     if len(replay) % 1000 == 0: print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
 
 
@@ -94,7 +94,7 @@ while True:
 
     # collect new experience
     obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
-    replay.add_step(obs, action, reward, obs_next, terminated, truncated)
+    replay.add(obs, action, reward, obs_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
     obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)

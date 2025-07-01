@@ -47,12 +47,8 @@ class ReplayBuffer:
         self._last_rewards = []
         self._episodes = 0
 
-    def add(self, episode: Episode):
-        for obs, action, reward, obs_next, done in episode.experiences:
-            self.add_step(obs, action, reward, obs_next, done, False) # note: we ignore truncated states, since the agent shouldn't treat them as done state
-
-    def add_step(self, obs, action, reward, obs_next, terminated, truncated):
-        exp = Exp(obs, action, reward, obs_next, terminated)
+    def add(self, obs, action, reward, obs_next, terminated, truncated=None):
+        exp = Exp(obs, action, reward, obs_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
         self.experiences.append(exp)
         self._last_rewards.append(reward)
         if terminated or truncated:
