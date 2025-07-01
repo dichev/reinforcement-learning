@@ -305,7 +305,7 @@ if __name__ == '__main__':
     from lib.playground import play_episode
     import envs.custom_gyms
     # env = make_pong(render_mode='human')
-    env = gym.make('custom/PongOpenAI')
+    env = gym.make('custom/Pong')
     obs, _ = env.reset()
     print('Obs:', obs.shape)
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
