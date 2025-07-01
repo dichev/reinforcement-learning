@@ -159,4 +159,4 @@ print(f"Playing one episode with the trained agent")
 env_ = gym.make(**ENV_SETTINGS, render_mode='human')
 episode = play_episode(env_, lambda s : agent.policy(s, greedy=True))
 print(f"Episode finished with total reward {episode.total_rewards}")
-
+env_.close()

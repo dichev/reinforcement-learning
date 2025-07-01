@@ -57,38 +57,25 @@ class StepPenaltyWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
 
-class TimeLimit(gym.Wrapper):
-    """
-    Limit the number of steps per episode
-    """
-    def __init__(self, env, max_episode_steps=None):
-        super(TimeLimit, self).__init__(env)
-        self._max_episode_steps = max_episode_steps
-        self._elapsed_steps = 0
 
-    def step(self, ac):
-        observation, reward, terminated, truncated, info = self.env.step(ac)
-        self._elapsed_steps += 1
-        if not terminated and self._elapsed_steps >= self._max_episode_steps:
-            truncated = True
-        return observation, reward, terminated, truncated, info
+class FireResetEnv(gym.Wrapper):
+    """
+    Take action on reset for environments that are fixed until firing.
+    """
+    def __init__(self, env):
+        super().__init__(env)
+        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
+        assert len(env.unwrapped.get_action_meanings()) >= 3
 
     def reset(self, **kwargs):
-        self._elapsed_steps = 0
-        return self.env.reset(**kwargs)
-
-
-class ClipActionsWrapper(gym.Wrapper):
-    """
-    Ensures that passed actions are clipped within the action space bounds
-    """
-    def step(self, action):
-        action = np.nan_to_num(action)
-        action = np.clip(action, self.action_space.low, self.action_space.high)
-        return self.env.step(action)
-
-    def reset(self, **kwargs):
-        return self.env.reset(**kwargs)
+        self.env.reset(**kwargs)
+        obs, _, terminated, truncated, _ = self.env.step(1)
+        if terminated or truncated:
+            self.env.reset(**kwargs)
+        obs, _, terminated, truncated, _ = self.env.step(2)
+        if terminated or truncated:
+            self.env.reset(**kwargs)
+        return obs, {}
 
 
 class ImageToPyTorch(gym.ObservationWrapper):

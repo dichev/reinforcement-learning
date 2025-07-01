@@ -17,5 +17,6 @@ register(
 
 register(
     id='custom/Pong',
-    entry_point='src.envs.external.atari_wrappers_openai:make_pong'
+    entry_point='src.envs.atari:make_atari',
+    kwargs={'id': 'ALE/Pong-v5'}
 )
