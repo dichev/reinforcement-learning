@@ -90,3 +90,17 @@ class ClipActionsWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         return self.env.reset(**kwargs)
 
+
+class ImageToPyTorch(gym.ObservationWrapper):
+    """
+    Converts image observation shape from (H, W, C) format to (C, H, W) for PyTorch compatibility
+    """
+    def __init__(self, env):
+        super(ImageToPyTorch, self).__init__(env)
+        assert isinstance(self.observation_space, gym.spaces.Box), "Image observation space must be Box"
+        prev_space = self.observation_space
+        H, W, C = prev_space.shape
+        self.observation_space = gym.spaces.Box(low=prev_space.low.min(), high=prev_space.high.max(), shape=(C, H, W), dtype=prev_space.dtype)
+
+    def observation(self, observation):
+        return np.moveaxis(observation, 2, 0)

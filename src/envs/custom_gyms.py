@@ -19,3 +19,8 @@ register(
     id='custom/Pong',
     entry_point='src.envs.external.AtariWrappers:make_pong'
 )
+
+register(
+    id='custom/PongOpenAI',
+    entry_point='src.envs.external.atari_wrappers_openai:make_pong'
+)

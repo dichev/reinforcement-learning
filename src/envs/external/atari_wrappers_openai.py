@@ -10,7 +10,7 @@ import ale_py
 from gymnasium import spaces
 import cv2
 cv2.ocl.setUseOpenCL(False)
-from envs.wrappers import TimeLimit
+from envs.wrappers import TimeLimit, ImageToPyTorch
 
 
 class NoopResetEnv(gym.Wrapper):
@@ -295,15 +295,19 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
 
 
 def make_pong(**kwargs):
-    return wrap_deepmind(make_atari('PongNoFrameskip-v4', **kwargs))
+    env = make_atari('PongNoFrameskip-v4', **kwargs)
+    env = wrap_deepmind(env, episode_life=False, clip_rewards=True, frame_stack=True, scale=True)
+    env = ImageToPyTorch(env)
+    return env
 
 
 if __name__ == '__main__':
     from lib.playground import play_episode
-    env = make_atari('PongNoFrameskip-v4', render_mode='human')
-    env = wrap_deepmind(env)
+    import envs.custom_gyms
+    # env = make_pong(render_mode='human')
+    env = gym.make('custom/PongOpenAI')
     obs, _ = env.reset()
     print('Obs:', obs.shape)
-    episode = play_episode(env, policy=lambda obs: env.action_space.sample())#, max_steps=50)
+    episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)
-    env.close()
+    # env.close()
