@@ -11,26 +11,24 @@ from lib.tracking import writer_add_params
 from lib.utils import now
 
 
-ENV_SETTINGS = dict(id='custom/Pong')
-ENV_GOAL = 19
-LEARN_RATE = .0001
-GAMMA = .99
-EPS = dict(
-    INITIAL = 1.0,
-    FINAL = 0.05,
-    DURATION = 150_000,
-)
-REPLAY_SIZE = 10_000
-REPLAY_SIZE_START = 10_000
-BATCH_SIZE = 32   # steps
-LOG_STEP = 100
-DEVICE = 'cuda'
-TARGET_NET_SYNC_STEPS = 1_000
-EVAL_NUM_EPISODES = 10
+ENV_SETTINGS       = dict(id='custom/Pong')
+ENV_GOAL           = 19
+LEARN_RATE         = 0.0001
+GAMMA              = 0.99
+EPS_INITIAL        = 1.0
+EPS_FINAL          = 0.01
+EPS_DURATION       = 150_000
+REPLAY_SIZE        = 10_000
+REPLAY_SIZE_START  = 10_000
+BATCH_SIZE         = 32   # steps
+LOG_STEP           = 100
+TARGET_SYNC        = 1_000 # steps
+EVAL_NUM_EPISODES  = 10
+DEVICE             = 'cuda'
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_frames, eps=EPS['INITIAL']):
+    def __init__(self, k_actions, n_frames, eps=EPS_INITIAL):
         super().__init__()
         self.net = nn.Sequential(                                                         # in:  n, 84, 84
             nn.Conv2d(in_channels=n_frames, out_channels=32, kernel_size=8, stride=4),    # ->  32, 20, 20
@@ -89,7 +87,7 @@ steps = 0
 ts = time.time()
 while True:
     steps += 1
-    agent.eps = torch.tensor(max(EPS['FINAL'], EPS['INITIAL'] - steps / EPS['DURATION']))  # linear scheduler
+    agent.eps = torch.tensor(max(EPS_FINAL, EPS_INITIAL - steps / EPS_DURATION))  # linear scheduler
 
     # collect new experience
     ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
@@ -112,7 +110,7 @@ while True:
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
 
     # sync target network
-    if steps % TARGET_NET_SYNC_STEPS == 0:
+    if steps % TARGET_SYNC == 0:
         agent_target.load_state_dict(agent.state_dict())
 
 
@@ -138,7 +136,7 @@ while True:
             writer.add_image("Observations/Before & After (unstacked)", make_grid(torch.cat((ob, ob_next)).unsqueeze(1), nrow=4), steps)
 
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
-            agent.eps = torch.tensor(EPS['FINAL'])
+            agent.eps = torch.tensor(EPS_FINAL)
             score, episode_length, value = evaluate_policy_agent(env, agent, EVAL_NUM_EPISODES, DEVICE)
             print(f"Evaluation: {score=}, {episode_length=}, {value=}")
             writer.add_scalar('Eval/Avg score', score, steps)
