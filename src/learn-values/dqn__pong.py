@@ -71,6 +71,7 @@ class DQNAgent(nn.Module):
         return Q.argmax(dim=-1).item()
 
 
+# Define model and tools
 env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
 loss_fn = nn.MSELoss()
@@ -81,14 +82,15 @@ writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer:")
-while replay.size < REPLAY_SIZE_START:
-    episode = play_episode(env, agent.policy)
-    replay.add(episode)
-    print(f"Replay buffer size: {replay.size}/{replay.capacity}")
-
-
-print(f"Training.. Target network: {TARGET_NET_ENABLED}")
 exp_iterator = play_steps(env, policy=agent.policy)
+while replay.size < REPLAY_SIZE_START:
+    obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
+    replay.add_step(obs, action, reward, obs_next, terminated, truncated)
+    if replay.size % 1000 == 0: print(f"-> Replay buffer size: {replay.size}/{replay.capacity}")
+
+
+# Training loop
+print(f"Training.. Target network: {TARGET_NET_ENABLED}")
 mov_loss = 0
 steps = 0
 ts = time.time()
