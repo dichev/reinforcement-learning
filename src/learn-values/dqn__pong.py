@@ -1,6 +1,7 @@
 import torch
 from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 import envs.custom_gyms
 import gymnasium as gym
 import copy
@@ -120,19 +121,23 @@ while True:
     if steps % LOG_STEP == 0:
         n = LOG_STEP
         fps = n / (time.time() - ts)
-        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats['avg_score']=:.2f}, best_score={replay.stats['best_score']=:.2f}, avg_episode_length={replay.stats['avg_episode_length']=:.2f} | {fps=:.2f} ")
+        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats['avg_score']:.2f}, best_score={replay.stats['best_score']:.2f}, avg_episode_length={replay.stats['avg_episode_length']:.2f} | {fps=:.2f} ")
         writer.add_scalar('Replay buffer/Avg score', replay.stats['avg_score'], steps)
         writer.add_scalar('Replay buffer/Avg episode length', replay.stats['avg_episode_length'], steps)
         writer.add_scalar('Replay buffer/Best score', replay.stats['best_score'], steps)
         writer.add_scalar('Train/Mov loss', mov_loss, steps)
         writer.add_scalar('Train/FPS', fps, steps)
         writer.add_scalar('Train/Epsilon', agent.eps, steps)
-        if steps % (LOG_STEP*10)  == 0:
+        if steps == 1000 or steps % (LOG_STEP*100) == 0:
             writer.add_histogram('hist/Rewards', rewards, steps)
             writer.add_histogram('hist/Observations', obs, steps)
             writer.add_histogram('hist/Returns', R, steps)
+            writer.add_histogram('hist/Errors', R - Q_action, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
-        if steps == 1000 or steps % (LOG_STEP*100) == 0:
+            ob, ob_next = obs.data[0], obs_next.data[0]
+            writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)
+            writer.add_image("Observations/Before & After (unstacked)", make_grid(torch.cat((ob, ob_next)).unsqueeze(1), nrow=4), steps)
+
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
             agent.eps = torch.tensor(EPS['FINAL'])
             score, episode_length, value = evaluate_policy_agent(env, agent, EVAL_NUM_EPISODES, DEVICE)
@@ -140,6 +145,7 @@ while True:
             writer.add_scalar('Eval/Avg score', score, steps)
             writer.add_scalar('Eval/Avg episode length', episode_length, steps)
             writer.add_scalar('Eval/Avg maxQ value', value, steps)
+
             if score >= ENV_GOAL:
                 print(f"Environment solved in {steps} steps!")
                 torch.save({
