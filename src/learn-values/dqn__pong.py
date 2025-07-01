@@ -3,11 +3,9 @@ from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 import envs.custom_gyms
 import gymnasium as gym
-import numpy as np
 import copy
 import time
-
-from lib.playground import play_episode, play_steps, ReplayBuffer
+from lib.playground import play_episode, play_steps, ReplayBuffer, evaluate_policy_agent
 from lib.tracking import writer_add_params
 from lib.utils import now
 
@@ -18,16 +16,17 @@ LEARN_RATE = .0001
 GAMMA = .99
 EPS = dict(
     INITIAL = 1.0,
-    FINAL = 0.01,
+    FINAL = 0.05,
     DURATION = 150_000,
 )
-HIDDEN_SIZE = 128
-REPLAY_SIZE = 10_000 # steps
+REPLAY_SIZE = 10_000
+REPLAY_SIZE_START = 10_000
 BATCH_SIZE = 32   # steps
 LOG_STEP = 100
 DEVICE = 'cuda'
 TARGET_NET_ENABLED = True
 TARGET_NET_SYNC_STEPS = 1_000
+EVAL_NUM_EPISODES = 10
 
 
 
@@ -82,23 +81,15 @@ writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer:")
-while replay.size < replay.capacity:
+while replay.size < REPLAY_SIZE_START:
     episode = play_episode(env, agent.policy)
     replay.add(episode)
     print(f"Replay buffer size: {replay.size}/{replay.capacity}")
 
 
-
 print(f"Training.. Target network: {TARGET_NET_ENABLED}")
 exp_iterator = play_steps(env, policy=agent.policy)
 mov_loss = 0
-history = {
-    'scores': [],
-    'episode_lengths': [],
-    'last_rewards': [],
-}
-scores = []
-rewards = []
 steps = 0
 ts = time.time()
 while True:
@@ -108,8 +99,6 @@ while True:
     # collect new experience
     obs, action, reward, obs_next, terminated, truncated = next(exp_iterator)
     replay.add_step(obs, action, reward, obs_next, terminated, truncated)
-    finished = terminated or truncated
-    history['last_rewards'].append(reward)
 
     # sample batched experiences from the replay buffer
     obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
@@ -136,46 +125,39 @@ while True:
 
 
     # Collect some stats
-    if finished:
-        episode_rewards = history['last_rewards']
-        score = sum(episode_rewards)
-        history['scores'].append(score)
-        history['episode_lengths'].append(len(episode_rewards))
-        history['last_rewards'] = []
-
     if steps % LOG_STEP == 0:
-        avg_score = 0
         n = LOG_STEP
-        ts_prev, ts = ts, time.time()
-        fps = n / (ts - ts_prev)
-        if len(history['scores']):
-            avg_score = np.mean(history['scores'][-n:])
-            best_score = np.max(history['scores'][-n:])
-            avg_episode_length = np.mean(history['episode_lengths'][-n:])
-            print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} {fps=:.2f} | {avg_score=:.2f}, {best_score=:.2f} {avg_episode_length=:.2f},")
-            writer.add_scalar('t/Avg score', avg_score, steps)
-            writer.add_scalar('t/Best score', best_score, steps)
-            writer.add_scalar('t/Avg episode length', avg_episode_length, steps)
-        else:
-            print(f"#{steps:>4} | last_loss={loss:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} {fps=:.2f}")
-
-        writer.add_scalar('t/Mov loss', mov_loss, steps)
-        writer.add_scalar('t/FPS', fps, steps)
-        writer.add_scalar('t/Epsilon', agent.eps, steps)
+        fps = n / (time.time() - ts)
+        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats['avg_score']=:.2f}, best_score={replay.stats['best_score']=:.2f}, avg_episode_length={replay.stats['avg_episode_length']=:.2f} | {fps=:.2f} ")
+        writer.add_scalar('Replay buffer/Avg score', replay.stats['avg_score'], steps)
+        writer.add_scalar('Replay buffer/Avg episode length', replay.stats['avg_episode_length'], steps)
+        writer.add_scalar('Replay buffer/Best score', replay.stats['best_score'], steps)
+        writer.add_scalar('Train/Mov loss', mov_loss, steps)
+        writer.add_scalar('Train/FPS', fps, steps)
+        writer.add_scalar('Train/Epsilon', agent.eps, steps)
         if steps % (LOG_STEP*10)  == 0:
             writer.add_histogram('hist/Rewards', rewards, steps)
             writer.add_histogram('hist/Observations', obs, steps)
             writer.add_histogram('hist/Returns', R, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
+        if steps == 1000 or steps % (LOG_STEP*100) == 0:
+            print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
+            agent.eps = torch.tensor(EPS['FINAL'])
+            score, episode_length, value = evaluate_policy_agent(env, agent, EVAL_NUM_EPISODES, DEVICE)
+            print(f"Evaluation: {score=}, {episode_length=}, {value=}")
+            writer.add_scalar('Eval/Avg score', score, steps)
+            writer.add_scalar('Eval/Avg episode length', episode_length, steps)
+            writer.add_scalar('Eval/Avg maxQ value', value, steps)
+            if score >= ENV_GOAL:
+                print(f"Environment solved in {steps} steps!")
+                torch.save({
+                    'steps': steps,
+                    'model': agent.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                }, f'./runs/DQN-Pong - {score=:.2f}, {steps=} - {now()}.pt')
+                break
 
-        if avg_score >= ENV_GOAL:
-            print(f"Environment solved in {steps} steps!")
-            torch.save({
-                'steps': steps,
-                'model': agent.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }, f'./runs/DQN-Pong - {avg_score=:.2f}, {steps=} - {now()}.pt')
-            break
+        ts = time.time()
 
 # Play one episode with visualization
 print(f"Playing one episode with the trained agent")
