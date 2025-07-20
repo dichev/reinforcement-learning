@@ -56,6 +56,29 @@ def discount_n_steps(rewards, gamma, n):  # ignores rewards past n future steps
 
 
 
+def distributional_bellman(support, probs, reward, gamma):  # todo: handle terminal states and batch dim
+    """
+        Categorical Algorithm 1 from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
+    """
+    z = support
+    N, v_min, v_max = len(z), support.min(), support.max()
+    dz = (v_max - v_min) / (N - 1)
+
+    # Compute the projection onto the support z:
+    z_proj = (reward + gamma * z).clip(v_min, v_max)
+    b = (z_proj - v_min) / dz  # b is a float bin position
+    l = b.floor().long()
+    u = b.ceil().long()
+
+    # Distribute probability of the projection:
+    m = torch.zeros_like(probs)
+    u_ratio = b - l          # split the prob mass between the lower and upper bin
+    l_ratio = 1. - u_ratio   # note when b is an integer (b=l=u) the whole mass goes to the lower bin
+    m.index_add_(0, l, probs * l_ratio)
+    m.index_add_(0, u, probs * u_ratio)
+
+    return m
+
 
 
 if __name__ == '__main__':
@@ -66,5 +89,11 @@ if __name__ == '__main__':
     print('-------------------------------------------------------------')
     measure('N-step discount Loop      ', lambda : discount_n_steps_loop(torch.randn(1000, 2), .99, n=100))
     measure('N-step discount Vectorized', lambda : discount_n_steps(torch.randn(1000, 2), .99, n=100))
+
+
+
+
+
+
 
 
