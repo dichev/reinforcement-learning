@@ -55,18 +55,22 @@ def discount_n_steps(rewards, gamma, n):  # ignores rewards past n future steps
     return returns
 
 
+def distributional_bellman(support, probs, rewards, gamma, dones):
+    """
+    Categorical Algorithm 1 from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
+    """
+    B, N = probs.shape
+    assert rewards.shape == (B, 1), f"Expected rewards.shape == ({B}, 1) but got {rewards.shape}"
+    assert dones.shape == (B, 1) and dones.dtype == torch.long, f"Expected dones.shape == ({B}, 1) but got {dones.shape}"
+    assert len(support) == N, f"Expected len(support) == {N} but got {len(support)}"
 
-def distributional_bellman(support, probs, reward, gamma):  # todo: handle terminal states and batch dim
-    """
-        Categorical Algorithm 1 from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
-    """
-    z = support
-    N, v_min, v_max = len(z), support.min(), support.max()
+    v_min, v_max = support.min(), support.max()
     dz = (v_max - v_min) / (N - 1)
 
-    # Compute the projection onto the support z:
-    z_proj = (reward + gamma * z).clip(v_min, v_max)
-    b = (z_proj - v_min) / dz  # b is a float bin position
+    # Compute the projection onto the support:
+    z_proj = rewards + (1 - dones) * gamma * support
+    b = (z_proj.clip(v_min, v_max) - v_min) / dz  # b is a float bin position
+    b = b.clip(0, N - 1)    # avoid rounding errors, causing out-of-bounds indices (e.g. 20 / 0.3999 = 50.0125 > N-1)
     l = b.floor().long()
     u = b.ceil().long()
 
@@ -74,8 +78,8 @@ def distributional_bellman(support, probs, reward, gamma):  # todo: handle termi
     m = torch.zeros_like(probs)
     u_ratio = b - l          # split the prob mass between the lower and upper bin
     l_ratio = 1. - u_ratio   # note when b is an integer (b=l=u) the whole mass goes to the lower bin
-    m.index_add_(0, l, probs * l_ratio)
-    m.index_add_(0, u, probs * u_ratio)
+    m.scatter_add_(1, l, probs * l_ratio)
+    m.scatter_add_(1, u, probs * u_ratio)
 
     return m
 
