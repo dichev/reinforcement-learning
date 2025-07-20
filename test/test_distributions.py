@@ -1,33 +1,40 @@
 import torch
 import pytest
 
-from lib.calc import distributional_bellman
+from lib.calc import categorical_projection
 
 
 
-def test_distributional_bellman(plot=True):
-    source = torch.tensor([.05, .07, .09, .10, .11, .16, .11, .10, .09, .07, .05])
-    support = torch.linspace(0, len(source) - 1, len(source))
+def test_categorical_projection(plot=True):
+    probs_fixed = torch.tensor([.05, .07, .09, .10, .11, .16, .11, .10, .09, .07, .05])
+    support = torch.linspace(0, len(probs_fixed) - 1, len(probs_fixed))
+    v_min, v_max = support.min(), support.max()
 
     def case(rewards, gamma, dones, expected):
         expected = torch.as_tensor(expected, dtype=torch.float)
         B, N_atoms = expected.shape
         rewards = torch.tensor(rewards)
         dones = torch.tensor(dones)
-        sources = source.expand(B, N_atoms)
+        probs = probs_fixed.expand(B, N_atoms)
 
-        targets = distributional_bellman(support, sources, rewards, gamma, dones)
+        # Bellman update operator (over the atoms):
+        Tz = rewards + (1 - dones) * gamma * support
+
+        # Projection onto the fixed support
+        proj = categorical_projection(Tz, probs, v_min, v_max)
+
+        # plot and testing
         if plot:
             from matplotlib import pyplot as plt
-            for source_, target, reward in zip(sources, targets, rewards):
+            for source_, target, reward in zip(probs, proj, rewards):
                 plt.bar(support, source_, alpha=0.6, width=0.35, label="source")
                 plt.bar(support, target, alpha=0.6, width=0.35, label="projected")
                 plt.axvline(reward, label=f'{reward=}', color='black')
                 plt.title(f'{reward=}, {gamma=}')
                 plt.legend()
                 plt.show()
-        torch.testing.assert_close(targets.sum(dim=-1), torch.ones(B))  # valid distribution sums to 1
-        torch.testing.assert_close(targets, expected)
+        torch.testing.assert_close(proj.sum(dim=-1), torch.ones(B))  # valid distribution sums to 1
+        torch.testing.assert_close(proj, expected)
 
     # Collapse
     case(rewards=[[7.00]], gamma=0., dones=[[0]], expected=[[0, 0, 0, 0, 0, 0, 0,   1,   0, 0, 0]])
@@ -41,7 +48,7 @@ def test_distributional_bellman(plot=True):
     case(rewards=[[-5.0]], gamma=0., dones=[[0]], expected=[[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
 
     # Gamma effect
-    case(rewards=[[ 0.0]], gamma=1., dones=[[0]], expected=source.view(1, -1))
+    case(rewards=[[ 0.0]], gamma=1., dones=[[0]], expected=probs_fixed.view(1, -1))
     case(rewards=[[ 1.0]], gamma=1., dones=[[0]], expected=[[0, .05, .07, .09, .10, .11, .16, .11, .10, .09, .07 + .05]])
     case(rewards=[[-1.0]], gamma=1., dones=[[0]], expected=[[.05 + .07, .09, .10, .11, .16, .11, .10, .09, .07, .05, 0]])
     case(rewards=[[ 5.0]], gamma=.5, dones=[[0]], expected=[[0, 0, 0, 0, 0, 0.085, 0.175, 0.24, 0.24, 0.175, 0.085]])

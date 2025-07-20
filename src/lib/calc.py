@@ -55,21 +55,16 @@ def discount_n_steps(rewards, gamma, n):  # ignores rewards past n future steps
     return returns
 
 
-def distributional_bellman(support, probs, rewards, gamma, dones):
+def categorical_projection(updated_support, probs, v_min, v_max): # Projected Bellman Update
     """
-    Categorical Algorithm 1 from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
+    Categorical Algorithm 1 (without the Bellman operator) from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
     """
     B, N = probs.shape
-    assert rewards.shape == (B, 1), f"Expected rewards.shape == ({B}, 1) but got {rewards.shape}"
-    assert dones.shape == (B, 1) and dones.dtype == torch.long, f"Expected dones.shape == ({B}, 1) but got {dones.shape}"
-    assert len(support) == N, f"Expected len(support) == {N} but got {len(support)}"
-
-    v_min, v_max = support.min(), support.max()
+    assert updated_support.shape == probs.shape, f"Expected matching support {updated_support.shape} and probs {probs.shape} shapes"
     dz = (v_max - v_min) / (N - 1)
 
     # Compute the projection onto the support:
-    z_proj = rewards + (1 - dones) * gamma * support
-    b = (z_proj.clip(v_min, v_max) - v_min) / dz  # b is a float bin position
+    b = (updated_support.clip(v_min, v_max) - v_min) / dz  # b is a float bin position
     b = b.clip(0, N - 1)    # avoid rounding errors, causing out-of-bounds indices (e.g. 20 / 0.3999 = 50.0125 > N-1)
     l = b.floor().long()
     u = b.ceil().long()
