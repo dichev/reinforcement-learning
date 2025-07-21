@@ -1,5 +1,6 @@
 import torch
 from torch import nn, optim
+from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 import envs.custom_gyms
@@ -9,6 +10,7 @@ import time
 from lib.playground import play_episode, play_steps, ReplayBuffer, evaluate_policy_agent
 from lib.tracking import writer_add_params
 from lib.utils import now
+from lib.calc import categorical_projection
 
 
 ENV_SETTINGS       = dict(id='custom/Pong')
@@ -26,10 +28,16 @@ TARGET_SYNC        = 1_000 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
 
+# Categorical specific:
+SUPPORT_ATOMS      = 51
+SUPPORT_MIN        = -10 # v_min
+SUPPORT_MAX        = 10  # v_max
+
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_frames, eps=EPS_INITIAL):
+    def __init__(self, k_actions, n_frames, support=(SUPPORT_ATOMS, SUPPORT_MIN, SUPPORT_MAX), eps=EPS_INITIAL):
         super().__init__()
+        n_atoms, v_min, v_max = support
         self.net = nn.Sequential(                                                         # in:  n, 84, 84
             nn.Conv2d(in_channels=n_frames, out_channels=32, kernel_size=8, stride=4),    # ->  32, 20, 20
             nn.ReLU(),
@@ -40,15 +48,19 @@ class DQNAgent(nn.Module):
             nn.Flatten(),                                                                 # -> 3136 (flatten)
             nn.Linear(64 * 7 * 7, 512),                                       # -> 512
             nn.ReLU(),
-            nn.Linear(512, k_actions)                                          # -> k_actions
+            nn.Linear(512, k_actions * n_atoms)                                # -> k_actions * n_atoms
         )
         self.k_actions = k_actions
+        self.n_atoms = n_atoms
         self.frames = n_frames
         self.register_buffer('eps', torch.tensor(eps))
+        self.register_buffer('support', torch.linspace(v_min, v_max, n_atoms))
 
     def forward(self, state):
         B, C, H, W = state.shape
-        return self.net(state)  # B, A
+        Z = self.net(state)                           # B, A x S
+        Z = Z.view(B, self.k_actions, self.n_atoms)   # B, A, S
+        return Z
 
     @torch.no_grad()
     def policy(self, state, greedy=False):
@@ -56,18 +68,20 @@ class DQNAgent(nn.Module):
             return torch.randint(self.k_actions, (1,)).item()
 
         C, H, W = state.shape
-        state = torch.tensor(state, dtype=torch.float).view(1, C, H, W).to(DEVICE)
-        Q = self(state)
+        state = torch.tensor(state, dtype=torch.float).view(1, C, H, W).to(DEVICE)  # 1, C, H, W
+        Z = self(state)                                                             # 1, A, S
+        Z_probs = F.softmax(Z, dim=-1)                                              # 1, A, S
+        Q = Z_probs @ self.support                                                  # 1, A, S @ S -> 1, A
         return Q.argmax(dim=-1).item()
 
 
 # Define model and tools
 env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
-loss_fn = nn.MSELoss()
+loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
-writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
+writer = SummaryWriter(f'runs/Cat-DQN env=Pong {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
 
 
@@ -84,6 +98,7 @@ while len(replay) < REPLAY_SIZE_START:
 print(f"Training..")
 mov_loss = 0
 steps = 0
+batch_rows = torch.arange(BATCH_SIZE)
 ts = time.time()
 while True:
     steps += 1
@@ -94,17 +109,23 @@ while True:
     replay.add(ob, action, reward, ob_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
-    obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
+    obs, actions, rewards, obs_next, dones = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
-        Q_next = agent_target(obs_next)
-    R = rewards + (1 - done) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
+        Z_next = agent_target(obs_next)                         #  B, A, S
+        probs = F.softmax(Z_next, dim=-1)                       #  B, A, S
+        best_actions = (probs @ agent.support).argmax(dim=-1)   #  B,
+        best_probs = probs[batch_rows, best_actions]            #  B, S
+
+        Tz = rewards + (1 - dones) * GAMMA * agent.support                           # Bellman update over the support (atoms)
+        Z_target = categorical_projection(Tz, best_probs, SUPPORT_MIN, SUPPORT_MAX)  # Project the updated distribution onto the fixed support
 
     # update the model
     optimizer.zero_grad()
-    Q_action = agent(obs).gather(dim=-1, index=actions)
-    loss = loss_fn(Q_action, R.detach())
+    Z = agent(obs)
+    Z_action = Z[batch_rows, actions.squeeze()]
+    loss = loss_fn(Z_action, Z_target.detach())
     loss.backward()
     optimizer.step()
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
@@ -128,8 +149,6 @@ while True:
         if steps == 1000 or steps % (LOG_STEP*100) == 0:
             writer.add_histogram('hist/Rewards', rewards, steps)
             writer.add_histogram('hist/Observations', obs, steps)
-            writer.add_histogram('hist/Returns', R, steps)
-            writer.add_histogram('hist/Errors', R - Q_action, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
             ob, ob_next = obs.data[0], obs_next.data[0]
             writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)
@@ -149,7 +168,7 @@ while True:
                     'steps': steps,
                     'model': agent.state_dict(),
                     'optimizer': optimizer.state_dict(),
-                }, f'./runs/DQN-Pong - {score=:.2f}, {steps=} - {now()}.pt')
+                }, f'./runs/Categorical-DQN-Pong - {score=:.2f}, {steps=} - {now()}.pt')
                 break
 
         ts = time.time()

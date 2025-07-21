@@ -94,12 +94,12 @@ while True:
     replay.add(ob, action, reward, ob_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
-    obs, actions, rewards, obs_next, done = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
+    obs, actions, rewards, obs_next, dones = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
         Q_next = agent_target(obs_next)
-    R = rewards + (1 - done) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
+    R = rewards + (1 - dones) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
 
     # update the model
     optimizer.zero_grad()
