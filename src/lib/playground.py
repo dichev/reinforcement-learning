@@ -35,7 +35,7 @@ class ReplayBuffer:
         self.experiences = deque(maxlen=capacity)
         self.stats = {
             'avg_score': 0.,
-            'best_score': 0.,
+            'best_score': -np.inf,
             'avg_episode_length': 0,
         }
         self._last_rewards = []
@@ -123,7 +123,7 @@ def evaluate_policy_agent(env, agent, n_episodes, device=None):
         scores += episode.total_rewards
         episode_length += len(episode)
         obs = torch.tensor(np.stack([exp[0] for exp in episode.experiences]), device=device, dtype=torch.float)
-        Q_max = agent(obs).max(dim=-1)[0].mean().item()  # max Q values averaged over each episode
+        Q_max = agent.q_values(obs).max(dim=-1)[0].mean().item()  # max Q values averaged over each episode
         values += Q_max
     score, episode_length, value = [s/n_episodes for s in (scores, episode_length, values)]
     return score, episode_length, value

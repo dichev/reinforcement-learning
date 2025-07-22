@@ -55,6 +55,28 @@ def discount_n_steps(rewards, gamma, n):  # ignores rewards past n future steps
     return returns
 
 
+def categorical_projection(updated_support, probs, v_min, v_max): # Projected Bellman Update
+    """
+    Categorical Algorithm 1 (without the Bellman operator) from "A Distributional Perspective on Reinforcement Learning" (https://arxiv.org/pdf/1707.06887)
+    """
+    B, N = probs.shape
+    assert updated_support.shape == probs.shape, f"Expected matching support {updated_support.shape} and probs {probs.shape} shapes"
+    dz = (v_max - v_min) / (N - 1)
+
+    # Compute the projection onto the support:
+    b = (updated_support.clip(v_min, v_max) - v_min) / dz  # b is a float bin position
+    b = b.clip(0, N - 1)    # avoid rounding errors, causing out-of-bounds indices (e.g. 20 / 0.3999 = 50.0125 > N-1)
+    l = b.floor().long()
+    u = b.ceil().long()
+
+    # Distribute probability of the projection:
+    m = torch.zeros_like(probs)
+    u_ratio = b - l          # split the prob mass between the lower and upper bin
+    l_ratio = 1. - u_ratio   # note when b is an integer (b=l=u) the whole mass goes to the lower bin
+    m.scatter_add_(1, l, probs * l_ratio)
+    m.scatter_add_(1, u, probs * u_ratio)
+
+    return m
 
 
 
