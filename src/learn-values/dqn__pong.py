@@ -51,6 +51,10 @@ class DQNAgent(nn.Module):
         return self.net(state)  # B, A
 
     @torch.no_grad()
+    def q_values(self, state):
+        return self(state)
+
+    @torch.no_grad()
     def policy(self, state, greedy=False):
         if not greedy and torch.rand(1).item() < self.eps:
             return torch.randint(self.k_actions, (1,)).item()

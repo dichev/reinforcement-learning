@@ -63,16 +63,23 @@ class DQNAgent(nn.Module):
         return Z
 
     @torch.no_grad()
+    def q_values(self, state):
+        B, C, H, W = state.shape
+        Z = self(state)                    # B, A, S
+        Z_probs = F.softmax(Z, dim=-1)     # B, A, S
+        Q = Z_probs @ self.support         # B, A, S @ S   ->   B, A
+        return Q
+
+    @torch.no_grad()
     def policy(self, state, greedy=False):
         if not greedy and torch.rand(1).item() < self.eps:
             return torch.randint(self.k_actions, (1,)).item()
 
         C, H, W = state.shape
         state = torch.tensor(state, dtype=torch.float).view(1, C, H, W).to(DEVICE)  # 1, C, H, W
-        Z = self(state)                                                             # 1, A, S
-        Z_probs = F.softmax(Z, dim=-1)                                              # 1, A, S
-        Q = Z_probs @ self.support                                                  # 1, A, S @ S -> 1, A
+        Q = self.q_values(state)
         return Q.argmax(dim=-1).item()
+
 
 
 # Define model and tools
