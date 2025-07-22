@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
@@ -11,6 +12,7 @@ from lib.playground import play_episode, play_steps, ReplayBuffer, evaluate_poli
 from lib.tracking import writer_add_params
 from lib.utils import now
 from lib.calc import categorical_projection
+from lib.plots import plot_value_distribution
 
 
 ENV_SETTINGS       = dict(id='custom/Pong')
@@ -90,6 +92,7 @@ optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
 writer = SummaryWriter(f'runs/Cat-DQN env=Pong {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
+ACTIONS = env.unwrapped.get_action_meanings()
 
 
 # Initial replay buffer fill
@@ -160,6 +163,10 @@ while True:
             ob, ob_next = obs.data[0], obs_next.data[0]
             writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)
             writer.add_image("Observations/Before & After (unstacked)", make_grid(torch.cat((ob, ob_next)).unsqueeze(1), nrow=4), steps)
+            fig = plot_value_distribution(obs[0], agent.support, F.softmax(Z[0], dim=-1), ACTIONS, f"Current obs: {ACTIONS[actions[0]]}")
+            writer.add_figure('Values/Cur Observation', fig, steps); plt.close(fig)
+            fig = plot_value_distribution(obs_next[0], agent.support, torch.stack((best_probs[0], Z_target[0])), (ACTIONS[best_actions[0]], ACTIONS[best_actions[0]]+' (proj)'), f"Next obs: Reward={rewards[0].item()}")
+            writer.add_figure('Values/Next Observation', fig, steps); plt.close(fig)
 
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
             agent.eps = torch.tensor(EPS_FINAL)
