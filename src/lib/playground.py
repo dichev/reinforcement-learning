@@ -1,7 +1,9 @@
 import torch
 import numpy as np
-from collections import deque, namedtuple
+from collections import namedtuple
 import random, math
+from lib.data_structures import CircularBuffer
+
 
 Exp = namedtuple('Exp', field_names=['ob', 'action', 'reward', 'ob_next', 'done'])
 
@@ -32,7 +34,7 @@ class Episode:
 class ReplayBuffer:
     def __init__(self, capacity):
         self.capacity = capacity
-        self.experiences = deque(maxlen=capacity)
+        self.experiences = CircularBuffer(capacity)  # O(1) random access, note deque has O(n) random access
         self.stats = {
             'avg_score': 0.,
             'best_score': -np.inf,
