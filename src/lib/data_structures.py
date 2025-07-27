@@ -18,10 +18,14 @@ class CircularBuffer(Sequence):
         return self.size == self.capacity
 
     def __getitem__(self, idx):
-        if not (0 <= idx < self.size):
-            raise IndexError(f"Index {idx} out of bounds [0, {self.size-1}]")
+        assert 0 <= idx < self.size, IndexError(f"Index {idx} out of bounds [0, {self.size-1}]")
         i = (self.pos + idx) % self.capacity if self.is_full else idx
         return self._buffer[i]
+
+    def __setitem__(self, idx, value):
+        assert 0 <= idx < self.size, IndexError(f"Index {idx} out of bounds [0, {self.size-1}]")
+        i = (self.pos + idx) % self.capacity if self.is_full else idx
+        self._buffer[i] = value
 
     def __len__(self):
         return self.size

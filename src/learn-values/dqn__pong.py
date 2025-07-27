@@ -123,10 +123,10 @@ while True:
     if steps % LOG_STEP == 0:
         n = LOG_STEP
         fps = n / (time.time() - ts)
-        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats['avg_score']:.2f}, best_score={replay.stats['best_score']:.2f}, avg_episode_length={replay.stats['avg_episode_length']:.2f} | {fps=:.2f} ")
-        writer.add_scalar('Replay buffer/Avg score', replay.stats['avg_score'], steps)
-        writer.add_scalar('Replay buffer/Avg episode length', replay.stats['avg_episode_length'], steps)
-        writer.add_scalar('Replay buffer/Best score', replay.stats['best_score'], steps)
+        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats.avg_score:.2f}, best_score={replay.stats.best_score:.2f}, avg_episode_length={replay.stats.avg_episode_length:.2f} | {fps=:.2f} ")
+        writer.add_scalar('Replay buffer/Avg score', replay.stats.avg_score, steps)
+        writer.add_scalar('Replay buffer/Avg episode length', replay.stats.avg_episode_length, steps)
+        writer.add_scalar('Replay buffer/Best score', replay.stats.best_score, steps)
         writer.add_scalar('Train/Mov loss', mov_loss, steps)
         writer.add_scalar('Train/FPS', fps, steps)
         writer.add_scalar('Train/Epsilon', agent.eps, steps)
