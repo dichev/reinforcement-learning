@@ -5,8 +5,8 @@ import gymnasium as gym
 import math
 import matplotlib.pyplot as plt
 import copy
-from lib.playground import play_episode, play_steps, ReplayBuffer
-
+from lib.playground import play_episode, play_steps
+from lib.replay_buffers import ReplayBuffer
 
 EPOCHS = 3000
 ENV_SETTINGS = dict(id='custom/GridWorldGym', size=4, mode='random', max_moves=50, noise=0.01)

@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 from collections import namedtuple
-import random, math
-from lib.data_structures import CircularBuffer
+import math
 
 
 Exp = namedtuple('Exp', field_names=['ob', 'action', 'reward', 'ob_next', 'done'])
@@ -28,48 +27,6 @@ class Episode:
 
     def __repr__(self):
         return f'Episode(steps={len(self)}, total_rewards={self.total_rewards}, done={self.done})'
-
-
-
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.experiences = CircularBuffer(capacity)  # O(1) random access, note deque has O(n) random access
-        self.stats = {
-            'avg_score': 0.,
-            'best_score': -np.inf,
-            'avg_episode_length': 0,
-        }
-        self._last_rewards = []
-        self._episodes = 0
-
-    def add(self, ob, action, reward, ob_next, terminated, truncated=None):
-        exp = Exp(ob, action, reward, ob_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
-        self.experiences.append(exp)
-        self._last_rewards.append(reward)
-        if terminated or truncated:
-            self._update_stats()
-
-    def sample(self, batch_size, device=None):
-        assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
-        batch = random.sample(self.experiences, batch_size)
-        obs, actions, rewards, obs_next, done = to_tensors(batch, device=device)
-        return obs, actions, rewards, obs_next, done
-
-    def _update_stats(self):
-        rewards = self._last_rewards
-        score, length = sum(rewards), len(rewards)
-        self.stats['best_score'] = max(score, self.stats['best_score'])
-        self.stats['avg_score'] = (.9 * score + .1 * self.stats['avg_score']) if self._episodes else score
-        self.stats['avg_episode_length'] = (.9 * self.stats['avg_episode_length'] + .1 * length) if self._episodes else length
-        self._episodes += 1
-        self._last_rewards.clear()
-
-    def __len__(self):
-        return len(self.experiences)
-
-    def __repr__(self):
-        return f'ReplayBuffer(size={len(self)}, capacity={self.capacity})'
 
 
 def to_tensors(experiences: list[Exp], device=None): # unified tensor formats
@@ -136,8 +93,4 @@ if __name__ == '__main__':
     env = gym.make("CartPole-v1", render_mode="human")
     episode = play_episode(env, lambda ob: env.action_space.sample())
     print(f"Episode finished with reward {episode.total_rewards}")
-    replay = ReplayBuffer(capacity=1000)
-    replay.add(episode)
-    print(replay)
-    batch = replay.sample(batch_size=10)
     env.close()

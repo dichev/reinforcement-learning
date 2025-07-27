@@ -6,7 +6,8 @@ import envs.custom_gyms
 import gymnasium as gym
 import copy
 import time
-from lib.playground import play_episode, play_steps, ReplayBuffer, evaluate_policy_agent
+from lib.playground import play_episode, play_steps, evaluate_policy_agent
+from lib.replay_buffers import ReplayBuffer
 from lib.tracking import writer_add_params
 from lib.utils import now
 
