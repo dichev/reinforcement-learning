@@ -1,7 +1,7 @@
 import random
 import torch
 from math import inf
-from lib.data_structures import CircularBuffer
+from lib.data_structures import CircularBuffer, CircularTensor
 from lib.playground import Exp, to_tensors, play_steps
 
 
@@ -65,6 +65,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
         self.capacity = capacity
         self.experiences = CircularBuffer(capacity)  # O(1) random access, note deque has O(n) random access
+        self.priorities = CircularTensor(capacity, dtype=torch.float)
         self.stats = Stats()
         self.alpha = alpha
         self.eps = eps
@@ -73,9 +74,9 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
     def add(self, ob, action, reward, ob_next, terminated, truncated=None):
         assert self._last_sampled is None, "Unexpected behavior"
-        priority = self._max_seen_priority
         exp = Exp(ob, action, reward, ob_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
-        self.experiences.append([priority, exp])
+        self.experiences.append(exp)
+        self.priorities.append(self._max_seen_priority)
         self.stats.update(reward, terminated, truncated)
 
     def sample(self, batch_size, replacement=True, device=None):
@@ -83,12 +84,12 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
-        p = torch.tensor([p for p, _ in self.experiences])
+        p = self.priorities.get_data()
         probs = p / p.sum()
         indices = torch.multinomial(probs, batch_size, replacement).tolist()
         self._last_sampled = indices
 
-        batch = [self.experiences[i][1] for i in indices]
+        batch = [self.experiences[i] for i in indices]
         obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
         return obs, actions, rewards, obs_next, dones  # todo: weights for important sampling
 
@@ -98,7 +99,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
         priorities = (priorities.abs() + self.eps) ** self.alpha
         for idx, priority in zip(self._last_sampled, priorities.tolist()):
-            self.experiences[idx][0] = priority
+            self.priorities[idx] = priority
             self._max_seen_priority = max(self._max_seen_priority, priority)   # note that ignores the evicted experiences, which will cause the max priority to stale
 
         self._last_sampled = None
