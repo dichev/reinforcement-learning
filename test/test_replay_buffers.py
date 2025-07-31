@@ -25,7 +25,7 @@ def test_disabled_priorities(capacity, batch_size):
     B = PrioritizedReplayBuffer(capacity, alpha=0.)
 
     exp_gen = generate_exp()
-    for _ in range(capacity + capacity//2):  # Fill beyond capacity
+    for _ in range(capacity + capacity//3):  # Fill beyond capacity
         ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
         A.add(ob, action, reward, ob_next, terminated, truncated)
         B.add(ob, action, reward, ob_next, terminated, truncated)
@@ -34,10 +34,9 @@ def test_disabled_priorities(capacity, batch_size):
     # Update priorities in the prioritized buffer (should have no effect with alpha=0)
     B.sample(batch_size, replacement=True)
     B.update(priorities := torch.randn(batch_size) * 5)
-    for exp_A, exp_B in zip(A.experiences, B.experiences):  # Test multiple samples
-        print(exp_A, exp_B)
+    for exp_A, (p, exp_B) in zip(A, B):  # Test multiple samples
         assert exp_A == exp_B
-    torch.testing.assert_close(B.priorities.get_data(), torch.ones(capacity))
+    torch.testing.assert_close(B.priorities, torch.ones(capacity))
 
 
 
@@ -49,12 +48,12 @@ def test_priorities_are_updated(capacity, alpha, batch_size):
 
     # Fill up the buffer (beyond its capacity)
     exp_gen = generate_exp()
-    for i in range(capacity + capacity//2):
+    for i in range(capacity + capacity//3):
         ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
         buffer.add(ob, action, reward, ob_next, terminated, truncated)
     assert len(buffer) == capacity
-    obs = torch.tensor([exp.ob for exp in buffer.experiences])
-    torch.testing.assert_close(obs, torch.arange(capacity) + capacity//2)
+    obs = torch.tensor([exp.ob for p, exp in buffer])
+    torch.testing.assert_close(obs, torch.arange(capacity) + capacity//3)
 
     # Sample and update priorities
     batch_size = 3

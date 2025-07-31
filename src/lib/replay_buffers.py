@@ -1,7 +1,7 @@
 import random
 import torch
 from math import inf
-from lib.data_structures import CircularBuffer, CircularTensor
+from lib.data_structures import CircularBuffer
 from lib.playground import Exp, to_tensors, play_steps
 
 
@@ -42,6 +42,10 @@ class ReplayBuffer:
         obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
         return obs, actions, rewards, obs_next, dones
 
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self.experiences[i]
+
     def __len__(self):
         return len(self.experiences)
 
@@ -64,27 +68,35 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         assert 0 <= alpha <= 1, f"Alpha must be in the range [0, 1], but got alpha={alpha}"
 
         self.capacity = capacity
-        self.experiences = CircularBuffer(capacity)  # O(1) random access, note deque has O(n) random access
-        self.priorities = CircularTensor(capacity, dtype=torch.float)
+        self.experiences = [None] * capacity
+        self.priorities = torch.empty(capacity, dtype=torch.float)
         self.stats = Stats()
         self.alpha = alpha
         self.eps = eps
         self._last_sampled = None  # store internally the sampled indices to update their priorities later
         self._max_seen_priority = 1.
 
+        self.pos  = 0  # pos is the writing head used for circular buffering
+        self.size = 0  # of the experiences and priorities
+
+
     def add(self, ob, action, reward, ob_next, terminated, truncated=None):
         assert self._last_sampled is None, "Unexpected behavior"
         exp = Exp(ob, action, reward, ob_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
-        self.experiences.append(exp)
-        self.priorities.append(self._max_seen_priority)
+
+        self.experiences[self.pos] = exp
+        self.priorities[self.pos] = self._max_seen_priority
         self.stats.update(reward, terminated, truncated)
+
+        self.pos = (self.pos + 1) % self.capacity    # circular list
+        self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size, replacement=True, device=None):
         assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
-        p = self.priorities.get_data()
+        p = self.priorities[:self.size]
         probs = p / p.sum()
         indices = torch.multinomial(probs, batch_size, replacement).tolist()
         self._last_sampled = indices
@@ -104,14 +116,16 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
         self._last_sampled = None
 
+    def __iter__(self):
+        for i in range(self.size):
+            idx = (self.pos + i) % self.capacity if self.size == self.capacity else i
+            yield self.priorities[idx], self.experiences[idx]
 
     def __len__(self):
-        return len(self.experiences)
+        return self.size
 
     def __repr__(self):
-        return f'PrioritizedReplayBuffer(size={len(self)}, capacity={self.capacity}, alpha={self.alpha})'
-
-
+        return f'{PrioritizedReplayBuffer}(size={len(self)}, capacity={self.capacity}, alpha={self.alpha})'
 
 
 if __name__ == '__main__':
