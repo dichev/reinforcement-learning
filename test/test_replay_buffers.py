@@ -1,5 +1,7 @@
 import pytest
 import torch
+
+from lib.data_structures import SumTree
 from lib.replay_buffers import ReplayBuffer, PrioritizedReplayBuffer
 import numpy as np
 
@@ -67,4 +69,60 @@ def test_priorities_are_updated(capacity, alpha, batch_size):
         torch.testing.assert_close(torch.tensor(p), p_expected)
 
 
+
+@pytest.mark.parametrize("capacity",    [2, 2**3, 2**10, 2**16])
+@pytest.mark.parametrize("values_mplr", [10., 0.001, 3.33])
+def test_full_sumtree(capacity, values_mplr):
+    tree = SumTree(capacity=capacity)
+
+    # Fill up the tree
+    values = (np.arange(capacity) * values_mplr).tolist()
+    for i, val in enumerate(values):
+        tree.update(i, val)
+    assert values == tree.get_data()
+    assert abs(tree.total_sum - sum(values)) < 1e-6
+    assert abs(tree.total_sum - sum(tree.get_data())) < 1e-6
+
+    # Verify tree sums
+    for i in reversed(range(tree.first_leaf)):
+        left  = 2*i + 1
+        right = 2*i + 2
+        expected_sum = tree.nodes[left] + tree.nodes[right]
+        assert abs(tree.nodes[i] - expected_sum) < 1e-6
+
+    # Test update functionality
+    prev_sum = tree.total_sum
+    extra_value = values_mplr * 10 #np.random.randn() * values_mplr
+    tree.update(0, extra_value)
+    assert abs(tree.total_sum - (prev_sum + extra_value)) < 1e-6
+
+
+@pytest.mark.parametrize("capacity", [2, 2**3, 2**10, 2**16])
+@pytest.mark.parametrize("values_mplr", [10., 0.001, 3.33])
+def test_sumtree_select(capacity, values_mplr):
+    tree = SumTree(capacity=capacity)
+
+    # Fill up the tree
+    values = (np.arange(capacity) * values_mplr).tolist()
+    for i, val in enumerate(values):
+        tree.update(i, val)
+
+    # Test selecting by priority mass
+    s = 0.
+    priorities = tree.get_data()
+    for i, p in enumerate(priorities):
+        s += p
+
+        delta = values_mplr / 2
+        # less than p mass
+        if i > 0:
+            idx = tree.query(s - delta)
+            p_selected = tree.get(idx)
+            assert i == idx and p == p_selected, f"Expected index {i} and priority {p}, but got index {idx} and {p_selected}"
+
+        # more than p mass, select next p
+        if i < len(priorities)-1:
+            idx = tree.query(s + delta)
+            p_selected = tree.get(idx)
+            assert i+1 == idx and priorities[i+1] == p_selected, f"Expected index {i+1} and priority {priorities[i+1]}, but got index {idx} and {p_selected}"
 
