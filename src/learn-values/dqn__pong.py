@@ -7,7 +7,7 @@ import gymnasium as gym
 import copy
 import time
 from lib.playground import play_episode, play_steps, evaluate_policy_agent
-from lib.replay_buffers import ReplayBuffer
+from lib.replay_buffers import PrioritizedReplayBuffer, PrioritizedReplayBufferTree
 from lib.tracking import writer_add_params
 from lib.utils import now
 
@@ -19,13 +19,17 @@ GAMMA              = 0.99
 EPS_INITIAL        = 1.0
 EPS_FINAL          = 0.01
 EPS_DURATION       = 150_000
-REPLAY_SIZE        = 10_000
-REPLAY_SIZE_START  = 10_000
 BATCH_SIZE         = 32   # steps
 LOG_STEP           = 100
 TARGET_SYNC        = 1_000 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
+
+# Prioritized replay buffer
+REPLAY_SIZE        = 2**14 #10_000
+REPLAY_SIZE_START  = REPLAY_SIZE
+REPLAY_PRIORITY_ALPHA = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
+REPLAY_PRIORITY_BETA  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
 
 
 class DQNAgent(nn.Module):
@@ -69,9 +73,8 @@ class DQNAgent(nn.Module):
 # Define model and tools
 env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
-loss_fn = nn.MSELoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
-replay = ReplayBuffer(capacity=REPLAY_SIZE)
+replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA)
 writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
 
@@ -99,7 +102,7 @@ while True:
     replay.add(ob, action, reward, ob_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
-    obs, actions, rewards, obs_next, dones = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
+    (obs, actions, rewards, obs_next, dones), p_indices, p_weights = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
@@ -109,10 +112,14 @@ while True:
     # update the model
     optimizer.zero_grad()
     Q_action = agent(obs).gather(dim=-1, index=actions)
-    loss = loss_fn(Q_action, R.detach())
+    td_error = Q_action - R.detach()
+    loss = torch.mean(p_weights * (td_error ** 2))
     loss.backward()
     optimizer.step()
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
+
+    # update replay priorities
+    replay.update(p_indices, td_error.squeeze().cpu().detach())
 
     # sync target network
     if steps % TARGET_SYNC == 0:
@@ -135,6 +142,8 @@ while True:
             writer.add_histogram('hist/Observations', obs, steps)
             writer.add_histogram('hist/Returns', R, steps)
             writer.add_histogram('hist/Errors', R - Q_action, steps)
+            writer.add_histogram('hist/Replay priorities', torch.tensor(replay.priorities.get_data()), steps)
+            writer.add_histogram('hist/Replay weights (import sampling)', p_weights, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
             ob, ob_next = obs.data[0], obs_next.data[0]
             writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)

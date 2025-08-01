@@ -106,7 +106,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         weights /= weights.max()  # normalize so that they only scale the update downwards
 
         batch = [self.experiences[i] for i in indices]
-        return to_tensors(batch, device=device), indices, weights
+        return to_tensors(batch, device=device), indices, weights.to(device)
 
     def update(self, indices, priorities):
         priorities = (priorities.abs() + self.eps) ** self.alpha
