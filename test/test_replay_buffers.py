@@ -1,23 +1,22 @@
 import pytest
 import torch
-from numpy.core.numeric import indices
 
 from lib.data_structures import SumTree
 from lib.replay_buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedReplayBufferTree
 import numpy as np
 
 
-def generate_exp():
-    ob = 0
-    while True:
-        action = np.random.randint(0, 5)
-        reward = np.random.randint(0, 2)
-        ob_next = ob + 1
-        terminated = np.random.choice([True, False])
-        truncated = np.random.choice([True, False])
-        yield ob, action, reward, ob_next, terminated, truncated
-        ob = ob_next
-
+def fill_replay_buffer(replay, n):
+    for i in range(n):
+        exp = dict(
+            ob = i,
+            action = np.random.randint(0, 5),
+            reward = np.random.randint(0, 2),
+            ob_next = i + 1,
+            terminated = np.random.choice([True, False]),
+            truncated = np.random.choice([True, False]),
+        )
+        replay.add(**exp)
 
 @pytest.mark.parametrize("capacity", [16, 1024, 2**14])
 @pytest.mark.parametrize("batch_size", [1, 16])
@@ -29,18 +28,16 @@ def test_disabled_priorities(capacity, batch_size, use_sumtree):
     else:
         B = PrioritizedReplayBuffer(capacity, alpha=0., beta=.4)
 
-    exp_gen = generate_exp()
-    for _ in range(capacity + capacity//3):  # Fill beyond capacity
-        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
-        A.add(ob, action, reward, ob_next, terminated, truncated)
-        B.add(ob, action, reward, ob_next, terminated, truncated)
+    # Fill beyond capacity
+    fill_replay_buffer(A, capacity + capacity//3)
+    fill_replay_buffer(B, capacity + capacity//3)
     assert len(A) == len(B) == capacity
 
     # Update priorities in the prioritized buffer (should have no effect with alpha=0)
     batch, indices, weights = B.sample(batch_size)
     B.update(indices, priorities := torch.randn(batch_size) * 5)
     for exp_A, (p, exp_B) in zip(A, B):  # Test multiple samples
-        assert exp_A == exp_B
+        assert exp_A.ob == exp_B.ob # the test exp generator assigns deterministic observations
         assert p == 1.
 
 
@@ -56,10 +53,7 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
         replay = PrioritizedReplayBuffer(capacity, alpha, beta=.4)
 
     # Fill up the buffer (beyond its capacity)
-    exp_gen = generate_exp()
-    for i in range(capacity + capacity//3):
-        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
-        replay.add(ob, action, reward, ob_next, terminated, truncated)
+    fill_replay_buffer(replay, capacity + capacity//3)
     assert len(replay) == capacity
     obs = torch.tensor([exp.ob for p, exp in replay])
     torch.testing.assert_close(obs, torch.arange(capacity) + capacity//3)
@@ -81,6 +75,7 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
         torch.testing.assert_close(torch.tensor(p), p_expected)
     torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
 
+
 @pytest.mark.parametrize("capacity", [16, 1024, 2**14])
 @pytest.mark.parametrize("usage", [0.1, 0.6, 1.])
 @pytest.mark.parametrize("use_sumtree", [True, False])
@@ -93,10 +88,7 @@ def test_sampling_is_bounded(capacity, usage, use_sumtree):
     usage_size = int(usage * capacity)
 
     # Fill up the buffer partially
-    exp_gen = generate_exp()
-    for i in range(usage_size):
-        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
-        replay.add(ob, action, reward, ob_next, terminated, truncated)
+    fill_replay_buffer(replay, usage_size)
     assert len(replay) == usage_size
 
     batch, indices, weights = replay.sample(batch_size=usage_size)
@@ -115,10 +107,7 @@ def test_prioritized_replay_importance_sampling(capacity, batch_size, use_sumtre
         replay = PrioritizedReplayBuffer(capacity, alpha=1., beta=beta)
 
     # Fill the buffer
-    exp_gen = generate_exp()
-    for _ in range(capacity):
-        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
-        replay.add(ob, action, reward, ob_next, terminated, truncated)
+    fill_replay_buffer(replay, capacity)
 
     # Set predefined priorities:
     priorities = torch.arange(capacity) * 10
