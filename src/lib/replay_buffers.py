@@ -36,10 +36,10 @@ class ReplayBuffer:
         self.experiences.append(exp)
         self.stats.update(reward, terminated, truncated)
 
-
     def sample(self, batch_size, device=None):
         assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
-        batch = random.sample(self.experiences, batch_size)
+        indices = torch.randint(len(self), (batch_size,)).tolist()  # with replacement
+        batch = [self.experiences[i] for i in indices]
         obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
         return obs, actions, rewards, obs_next, dones
 
@@ -176,7 +176,7 @@ if __name__ == '__main__':
     batch_size = 32
     p = torch.rand(batch_size)
     indices = random.sample(range(capacity), batch_size)
-    measure('PrioritizedReplayBuffer     | add & sample         ', number=1000, fn=lambda : [A.add(**exp), a := A.sample(batch_size)] )                     # O(1)     + k x O(n)
+    measure('ReplayBuffer                | add & sample         ', number=1000, fn=lambda : [A.add(**exp), a := A.sample(batch_size)] )                     # O(1)     + k x O(n)
     measure('PrioritizedReplayBuffer     | add & sample & update', number=1000, fn=lambda : [B.add(**exp), b := B.sample(batch_size), B.update(b[1], p)] )  # O(1)     + k x O(n)     + k x O(1)
     measure('PrioritizedReplayBufferTree | add & sample & update', number=1000, fn=lambda : [C.add(**exp), c := C.sample(batch_size), C.update(c[1], p)] )  # O(log n) + k x O(log n) + k x O(log n)
 
