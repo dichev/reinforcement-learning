@@ -60,11 +60,13 @@ class PrioritizedReplayBuffer: # with proportional prioritization
     https://arxiv.org/pdf/1511.05952
     """
 
-    def __init__(self, capacity, alpha, eps=1e-6, priorities_storage=None):
+    def __init__(self, capacity, alpha, beta, eps=1e-6, priorities_storage=None):
         """
         :param int capacity: The maximum number of experiences the buffer can store
-        :param float alpha: Determines how much prioritization is used, with α = 0 corresponding to the uniform case
+        :param float alpha: Controls how much prioritization is used (α = 0 is uniform sampling)
+        :param float beta: Controls how much importance sampling weights affect learning (β = 0 is no correction)
         :param float eps: Prevents zero (loss) value of priorities
+        :param priorities_storage: Provide custom priorities storage (e.g. SumTree), otherwise torch tensor will be used
         """
         assert 0 <= alpha <= 1, f"Alpha must be in the range [0, 1], but got alpha={alpha}"
 
@@ -73,6 +75,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         self.priorities = torch.empty(capacity, dtype=torch.float) if priorities_storage is None else priorities_storage
         self.stats = Stats()
         self.alpha = alpha
+        self.beta = beta
         self.eps = eps
         self._last_sampled = None  # store internally the sampled indices to update their priorities later
         self._max_seen_priority = 1.
@@ -97,14 +100,17 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
-        p = self.priorities[:self.size]
+        p = self.priorities[:self.size] if self.size < self.capacity else self.priorities
         probs = p / p.sum()
         indices = torch.multinomial(probs, batch_size, replacement=True).tolist()
         self._last_sampled = indices
 
+        # (weighted) importance sampling w = (1/N 1/P)^β
+        weights = (self.size * probs[indices]) ** -self.beta
+        weights /= weights.max()  # normalize so that they only scale the update downwards
+
         batch = [self.experiences[i] for i in indices]
-        obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
-        return obs, actions, rewards, obs_next, dones  # todo: weights for important sampling
+        return to_tensors(batch, device=device), weights
 
     def update(self, priorities):
         assert self._last_sampled is not None, "You must call sample() before calling update()"
@@ -134,20 +140,26 @@ class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
     """
         k x O(log n) sampling and updating with SumTree data structure
     """
-    def __init__(self, capacity, alpha, eps=1e-6):
-        super().__init__(capacity, alpha, eps, priorities_storage=SumTree(capacity))
+    def __init__(self, capacity, alpha, beta, eps=1e-6):
+        super().__init__(capacity, alpha, beta, eps, priorities_storage=SumTree(capacity))
 
     def sample(self, batch_size, device=None):
         assert self.size >= batch_size, f"Replay buffer has {self.size} steps, but batch_size={batch_size}"
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
-        draws = stratified_draws(self.priorities.total_sum, batch_size)   # O(k)
-        indices = [self.priorities.query(r) for r in draws.tolist()]      # k x O(log n)
+        # Efficient sampling: k x O(log n), (but note updating a priority is also O(log n))
+        draws = stratified_draws(self.priorities.total_sum, batch_size)
+        indices = [self.priorities.query(r) for r in draws.tolist()]
         self._last_sampled = indices
 
+        # (weighted) importance sampling: w = (1/N 1/P)^β
+        priorities = torch.tensor([self.priorities[i] for i in indices], device=device)
+        probs = priorities / self.priorities.total_sum
+        weights = (self.size * probs) ** -self.beta
+        weights /= weights.max()  # normalize so that they only scale the update downwards
+
         batch = [self.experiences[i] for i in indices]
-        obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
-        return obs, actions, rewards, obs_next, dones
+        return to_tensors(batch, device=device), weights
 
 
 if __name__ == '__main__':
@@ -157,8 +169,8 @@ if __name__ == '__main__':
 
     capacity = 2**17 # > 100_000
     A = ReplayBuffer(capacity)
-    B = PrioritizedReplayBuffer(capacity, alpha=.6)
-    C = PrioritizedReplayBufferTree(capacity, alpha=.6)
+    B = PrioritizedReplayBuffer(capacity, alpha=.6, beta=.4)
+    C = PrioritizedReplayBufferTree(capacity, alpha=.6, beta=.4)
     for i in range(capacity):  # Fill capacity
         exp = dict(
             ob = i,

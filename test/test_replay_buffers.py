@@ -24,9 +24,9 @@ def generate_exp():
 def test_disabled_priorities(capacity, batch_size, use_sumtree):
     A = ReplayBuffer(capacity)
     if use_sumtree:
-        B = PrioritizedReplayBufferTree(capacity, alpha=0.)
+        B = PrioritizedReplayBufferTree(capacity, alpha=0., beta=.4)
     else:
-        B = PrioritizedReplayBuffer(capacity, alpha=0.)
+        B = PrioritizedReplayBuffer(capacity, alpha=0., beta=.4)
 
     exp_gen = generate_exp()
     for _ in range(capacity + capacity//3):  # Fill beyond capacity
@@ -50,9 +50,9 @@ def test_disabled_priorities(capacity, batch_size, use_sumtree):
 @pytest.mark.parametrize("use_sumtree", [False, True])
 def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
     if use_sumtree:
-        replay = PrioritizedReplayBufferTree(capacity, alpha)
+        replay = PrioritizedReplayBufferTree(capacity, alpha, beta=.4)
     else:
-        replay = PrioritizedReplayBuffer(capacity, alpha)
+        replay = PrioritizedReplayBuffer(capacity, alpha, beta=.4)
 
     # Fill up the buffer (beyond its capacity)
     exp_gen = generate_exp()
@@ -86,9 +86,9 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
 @pytest.mark.parametrize("use_sumtree", [True, False])
 def test_sampling_is_bounded(capacity, usage, use_sumtree):
     if use_sumtree:
-        replay = PrioritizedReplayBufferTree(capacity, alpha=.9)
+        replay = PrioritizedReplayBufferTree(capacity, alpha=.9, beta=.4)
     else:
-        replay = PrioritizedReplayBuffer(capacity, alpha=.9)
+        replay = PrioritizedReplayBuffer(capacity, alpha=.9, beta=.4)
 
     usage_size = int(usage * capacity)
 
@@ -102,6 +102,49 @@ def test_sampling_is_bounded(capacity, usage, use_sumtree):
     replay.sample(batch_size=usage_size)
     indices = replay._last_sampled
     assert torch.all(torch.tensor(indices) < usage_size)
+
+
+
+@pytest.mark.parametrize("capacity", [32, 1024, 2**14])
+@pytest.mark.parametrize("batch_size", [1, 32])
+@pytest.mark.parametrize("use_sumtree", [True, False])
+@pytest.mark.parametrize("beta", [0.0, 0.4, 1.0])
+def test_prioritized_replay_importance_sampling(capacity, batch_size, use_sumtree, beta):
+    if use_sumtree:
+        replay = PrioritizedReplayBufferTree(capacity, alpha=1., beta=beta)
+    else:
+        replay = PrioritizedReplayBuffer(capacity, alpha=1., beta=beta)
+
+    # Fill the buffer
+    exp_gen = generate_exp()
+    for _ in range(capacity):
+        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
+        replay.add(ob, action, reward, ob_next, terminated, truncated)
+
+    # Set predefined priorities:
+    priorities = torch.arange(capacity) * 10
+    probs = priorities / priorities.sum()
+    for i, p in enumerate(priorities.tolist()):
+        replay.priorities[i] = p
+
+    # Sample with importance sampling
+    experiences, weights = replay.sample(batch_size)
+    indices = replay._last_sampled
+    assert torch.all(weights > 0.) and torch.all(weights <= 1.)
+
+    # Verify weights
+    if beta == 0.0: # No importance sampling correction
+        torch.testing.assert_close(weights, torch.ones_like(weights))
+    elif beta == 1.0: # Full importance sampling correction
+        weighted_probs = weights * probs[indices]
+        weighted_probs /= weighted_probs.sum()
+        expected_uniform = torch.ones_like(weighted_probs) / len(weighted_probs)
+        torch.testing.assert_close(weighted_probs, expected_uniform)
+    else: # For intermediate beta values weights should be proportional to importance sampling
+        expected_weights = (replay.size * probs[indices]) ** (-beta)
+        expected_weights /= expected_weights.max()
+        torch.testing.assert_close(weights, expected_weights)
+
 
 
 
