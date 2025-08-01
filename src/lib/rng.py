@@ -13,3 +13,11 @@ def seed_global(seed: int, deterministic=False):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         torch.use_deterministic_algorithms(True)
+
+
+
+def stratified_draws(total, k):
+    segment = total / k
+    draws = (torch.arange(k) + torch.rand(k)) * segment
+    return draws.clip(0, total)  # ensure there will be no draws outside the range due to rounding errors
+
