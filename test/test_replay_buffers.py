@@ -32,11 +32,11 @@ def test_disabled_priorities(capacity, batch_size):
     assert len(A) == len(B) == capacity
 
     # Update priorities in the prioritized buffer (should have no effect with alpha=0)
-    B.sample(batch_size, replacement=True)
+    B.sample(batch_size)
     B.update(priorities := torch.randn(batch_size) * 5)
     for exp_A, (p, exp_B) in zip(A, B):  # Test multiple samples
         assert exp_A == exp_B
-    torch.testing.assert_close(B.priorities, torch.ones(capacity))
+        assert p == 1.
 
 
 
@@ -44,29 +44,35 @@ def test_disabled_priorities(capacity, batch_size):
 @pytest.mark.parametrize("alpha", [0, .1, .9, .1])
 @pytest.mark.parametrize("batch_size", [1, 10, 99])
 def test_priorities_are_updated(capacity, alpha, batch_size):
-    buffer = PrioritizedReplayBuffer(capacity, alpha)
+    replay = PrioritizedReplayBuffer(capacity, alpha)
 
     # Fill up the buffer (beyond its capacity)
     exp_gen = generate_exp()
     for i in range(capacity + capacity//3):
         ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
-        buffer.add(ob, action, reward, ob_next, terminated, truncated)
-    assert len(buffer) == capacity
-    obs = torch.tensor([exp.ob for p, exp in buffer])
+        replay.add(ob, action, reward, ob_next, terminated, truncated)
+    assert len(replay) == capacity
+    obs = torch.tensor([exp.ob for p, exp in replay])
     torch.testing.assert_close(obs, torch.arange(capacity) + capacity//3)
 
     # Sample and update priorities
     batch_size = 3
-    buffer.sample(batch_size, replacement=False)
-    indices = buffer._last_sampled
+    replay.sample(batch_size)
+    indices = replay._last_sampled
     priorities = torch.randn(batch_size) * 5
-    buffer.update(priorities)
-    torch.testing.assert_close(torch.tensor(buffer._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
-    for idx, p_new in zip(indices, priorities):
-        p = buffer.priorities[idx]
-        p_expected = (p_new.abs() + buffer.eps) ** alpha
-        torch.testing.assert_close(torch.tensor(p), p_expected)
+    replay.update(priorities)
+    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
 
+    no_duplicates = dict()  # sampling is with replacement, but we keep the last priority update only
+    for idx, p in zip(indices, priorities):
+        no_duplicates[idx] = p
+
+    for idx, p_new in no_duplicates.items():
+        p = replay.priorities[idx]
+        p_expected = (p_new.abs() + replay.eps) ** alpha
+        print(p, p_expected, p_new)
+        torch.testing.assert_close(torch.tensor(p), p_expected)
+    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
 
 
 @pytest.mark.parametrize("capacity",    [2, 2**3, 2**10, 2**16])

@@ -91,14 +91,14 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         self.pos = (self.pos + 1) % self.capacity    # circular list
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self, batch_size, replacement=True, device=None):
+    def sample(self, batch_size, device=None):
         assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
         p = self.priorities[:self.size]
         probs = p / p.sum()
-        indices = torch.multinomial(probs, batch_size, replacement).tolist()
+        indices = torch.multinomial(probs, batch_size, replacement=True).tolist()
         self._last_sampled = indices
 
         batch = [self.experiences[i] for i in indices]
