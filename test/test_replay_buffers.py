@@ -1,5 +1,6 @@
 import pytest
 import torch
+from numpy.core.numeric import indices
 
 from lib.data_structures import SumTree
 from lib.replay_buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedReplayBufferTree
@@ -36,8 +37,8 @@ def test_disabled_priorities(capacity, batch_size, use_sumtree):
     assert len(A) == len(B) == capacity
 
     # Update priorities in the prioritized buffer (should have no effect with alpha=0)
-    B.sample(batch_size)
-    B.update(priorities := torch.randn(batch_size) * 5)
+    batch, indices, weights = B.sample(batch_size)
+    B.update(indices, priorities := torch.randn(batch_size) * 5)
     for exp_A, (p, exp_B) in zip(A, B):  # Test multiple samples
         assert exp_A == exp_B
         assert p == 1.
@@ -65,10 +66,9 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
 
     # Sample and update priorities
     batch_size = 3
-    replay.sample(batch_size)
-    indices = replay._last_sampled
+    batch, indices, weights = replay.sample(batch_size)
     priorities = torch.randn(batch_size) * 5
-    replay.update(priorities)
+    replay.update(indices, priorities)
     torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
 
     no_duplicates = dict()  # sampling is with replacement, but we keep the last priority update only
@@ -99,8 +99,7 @@ def test_sampling_is_bounded(capacity, usage, use_sumtree):
         replay.add(ob, action, reward, ob_next, terminated, truncated)
     assert len(replay) == usage_size
 
-    replay.sample(batch_size=usage_size)
-    indices = replay._last_sampled
+    batch, indices, weights = replay.sample(batch_size=usage_size)
     assert torch.all(torch.tensor(indices) < usage_size)
 
 
@@ -128,8 +127,7 @@ def test_prioritized_replay_importance_sampling(capacity, batch_size, use_sumtre
         replay.priorities[i] = p
 
     # Sample with importance sampling
-    experiences, weights = replay.sample(batch_size)
-    indices = replay._last_sampled
+    batch, indices, weights = replay.sample(batch_size)
     assert torch.all(weights > 0.) and torch.all(weights <= 1.)
 
     # Verify weights
@@ -144,7 +142,6 @@ def test_prioritized_replay_importance_sampling(capacity, batch_size, use_sumtre
         expected_weights = (replay.size * probs[indices]) ** (-beta)
         expected_weights /= expected_weights.max()
         torch.testing.assert_close(weights, expected_weights)
-
 
 
 

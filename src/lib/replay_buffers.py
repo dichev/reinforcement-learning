@@ -77,7 +77,6 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         self.alpha = alpha
         self.beta = beta
         self.eps = eps
-        self._last_sampled = None  # store internally the sampled indices to update their priorities later
         self._max_seen_priority = 1.
 
         self.pos  = 0  # pos is the writing head used for circular buffering
@@ -85,7 +84,6 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
 
     def add(self, ob, action, reward, ob_next, terminated, truncated=None):
-        assert self._last_sampled is None, "Unexpected behavior"
         exp = Exp(ob, action, reward, ob_next, terminated) # note: we ignore truncated states, since the agent shouldn't treat them as done state
 
         self.experiences[self.pos] = exp
@@ -97,31 +95,24 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
     def sample(self, batch_size, device=None):
         assert self.size >= batch_size, f"Replay buffer has {self.size} steps, but batch_size={batch_size}"
-        assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
         p = self.priorities[:self.size] if self.size < self.capacity else self.priorities
         probs = p / p.sum()
         indices = torch.multinomial(probs, batch_size, replacement=True).tolist()
-        self._last_sampled = indices
 
         # (weighted) importance sampling w = (1/N 1/P)^β
         weights = (self.size * probs[indices]) ** -self.beta
         weights /= weights.max()  # normalize so that they only scale the update downwards
 
         batch = [self.experiences[i] for i in indices]
-        return to_tensors(batch, device=device), weights
+        return to_tensors(batch, device=device), indices, weights
 
-    def update(self, priorities):
-        assert self._last_sampled is not None, "You must call sample() before calling update()"
-        assert len(priorities) == len(self._last_sampled), f"The number of priorities: {len(priorities)}, must match the number of last sampled indices {len(self._last_sampled)}"
-
+    def update(self, indices, priorities):
         priorities = (priorities.abs() + self.eps) ** self.alpha
-        for idx, priority in zip(self._last_sampled, priorities.tolist()):  # O(k x log n)
+        for idx, priority in zip(indices, priorities.tolist()):  # O(k x log n)
             self.priorities[idx] = priority
             self._max_seen_priority = max(self._max_seen_priority, priority)   # note that ignores the evicted experiences, which will cause the max priority to stale
-
-        self._last_sampled = None
 
     def __iter__(self):
         for i in range(self.size):
@@ -145,12 +136,10 @@ class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
 
     def sample(self, batch_size, device=None):
         assert self.size >= batch_size, f"Replay buffer has {self.size} steps, but batch_size={batch_size}"
-        assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # Efficient sampling: k x O(log n), (but note updating a priority is also O(log n))
         draws = stratified_draws(self.priorities.total_sum, batch_size)
         indices = [self.priorities.query(r) for r in draws.tolist()]
-        self._last_sampled = indices
 
         # (weighted) importance sampling: w = (1/N 1/P)^β
         priorities = torch.tensor([self.priorities[i] for i in indices], device=device)
@@ -159,7 +148,7 @@ class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
         weights /= weights.max()  # normalize so that they only scale the update downwards
 
         batch = [self.experiences[i] for i in indices]
-        return to_tensors(batch, device=device), weights
+        return to_tensors(batch, device=device), indices, weights
 
 
 if __name__ == '__main__':
@@ -187,7 +176,7 @@ if __name__ == '__main__':
     batch_size = 32
     p = torch.rand(batch_size)
     indices = random.sample(range(capacity), batch_size)
-    measure('PrioritizedReplayBuffer     | add & sample         ', number=1000, fn=lambda : [A.add(**exp), A.sample(batch_size)] )               # O(1)     + k x O(n)
-    measure('PrioritizedReplayBuffer     | add & sample & update', number=1000, fn=lambda : [B.add(**exp), B.sample(batch_size), B.update(p)] )  # O(1)     + k x O(n)     + k x O(1)
-    measure('PrioritizedReplayBufferTree | add & sample & update', number=1000, fn=lambda : [C.add(**exp), C.sample(batch_size), C.update(p)] )  # O(log n) + k x O(log n) + k x O(log n)
+    measure('PrioritizedReplayBuffer     | add & sample         ', number=1000, fn=lambda : [A.add(**exp), a := A.sample(batch_size)] )                     # O(1)     + k x O(n)
+    measure('PrioritizedReplayBuffer     | add & sample & update', number=1000, fn=lambda : [B.add(**exp), b := B.sample(batch_size), B.update(b[1], p)] )  # O(1)     + k x O(n)     + k x O(1)
+    measure('PrioritizedReplayBufferTree | add & sample & update', number=1000, fn=lambda : [C.add(**exp), c := C.sample(batch_size), C.update(c[1], p)] )  # O(log n) + k x O(log n) + k x O(log n)
 
