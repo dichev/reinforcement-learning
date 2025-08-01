@@ -20,3 +20,15 @@ register(
     entry_point='src.envs.atari:make_atari',
     kwargs={'id': 'ALE/Pong-v5'}
 )
+
+register(
+    id='custom/Freeway',
+    entry_point='src.envs.atari:make_atari',
+    kwargs={'id': 'ALE/Freeway-v5', 'fire_reset': False}
+)
+
+register(
+    id='custom/SpaceInvaders',
+    entry_point='src.envs.atari:make_atari',
+    kwargs={'id': 'ALE/SpaceInvaders-v5'}
+)
