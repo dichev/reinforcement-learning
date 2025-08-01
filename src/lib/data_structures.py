@@ -85,6 +85,12 @@ class SumTree:
     def total_sum(self):
         return self.nodes[0]
 
+    def __getitem__(self, idx): # used to match api calls
+        return self.get(idx)
+
+    def __setitem__(self, idx, value): # used to match api calls
+        self.update(idx, value)
+
     def __repr__(self):
         out  = f"{self.__class__.__name__}(capacity={self.capacity}, storage_size={self.storage_size}, total_sum={self.total_sum})\n"
         out += f"-> leaves={self.get_data()}"

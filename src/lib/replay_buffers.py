@@ -1,8 +1,9 @@
 import random
 import torch
 from math import inf
-from lib.data_structures import CircularBuffer
+from lib.data_structures import CircularBuffer, SumTree
 from lib.playground import Exp, to_tensors, play_steps
+from lib.rng import stratified_draws
 
 
 class Stats:
@@ -59,7 +60,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
     https://arxiv.org/pdf/1511.05952
     """
 
-    def __init__(self, capacity, alpha, eps=1e-6):
+    def __init__(self, capacity, alpha, eps=1e-6, priorities_storage=None):
         """
         :param int capacity: The maximum number of experiences the buffer can store
         :param float alpha: Determines how much prioritization is used, with α = 0 corresponding to the uniform case
@@ -69,7 +70,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
 
         self.capacity = capacity
         self.experiences = [None] * capacity
-        self.priorities = torch.empty(capacity, dtype=torch.float)
+        self.priorities = torch.empty(capacity, dtype=torch.float) if priorities_storage is None else priorities_storage
         self.stats = Stats()
         self.alpha = alpha
         self.eps = eps
@@ -92,7 +93,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size, device=None):
-        assert len(self.experiences) >= batch_size, f"Replay buffer has {len(self.experiences)} steps, but batch_size={batch_size}"
+        assert self.size >= batch_size, f"Replay buffer has {self.size} steps, but batch_size={batch_size}"
         assert self._last_sampled is None, "You must call update() before calling sample()"
 
         # O(n) but can be optimized with sum-tree to O(log n)
@@ -110,7 +111,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         assert len(priorities) == len(self._last_sampled), f"The number of priorities: {len(priorities)}, must match the number of last sampled indices {len(self._last_sampled)}"
 
         priorities = (priorities.abs() + self.eps) ** self.alpha
-        for idx, priority in zip(self._last_sampled, priorities.tolist()):
+        for idx, priority in zip(self._last_sampled, priorities.tolist()):  # O(k x log n)
             self.priorities[idx] = priority
             self._max_seen_priority = max(self._max_seen_priority, priority)   # note that ignores the evicted experiences, which will cause the max priority to stale
 
@@ -125,18 +126,56 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         return self.size
 
     def __repr__(self):
-        return f'{PrioritizedReplayBuffer}(size={len(self)}, capacity={self.capacity}, alpha={self.alpha})'
+        return f'{self.__class__.__name__}(size={len(self)}, capacity={self.capacity}, alpha={self.alpha})'
+
+
+
+class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
+    """
+        k x O(log n) sampling and updating with SumTree data structure
+    """
+    def __init__(self, capacity, alpha, eps=1e-6):
+        super().__init__(capacity, alpha, eps, priorities_storage=SumTree(capacity))
+
+    def sample(self, batch_size, device=None):
+        assert self.size >= batch_size, f"Replay buffer has {self.size} steps, but batch_size={batch_size}"
+        assert self._last_sampled is None, "You must call update() before calling sample()"
+
+        draws = stratified_draws(self.priorities.total_sum, batch_size)   # O(k)
+        indices = [self.priorities.query(r) for r in draws.tolist()]      # k x O(log n)
+        self._last_sampled = indices
+
+        batch = [self.experiences[i] for i in indices]
+        obs, actions, rewards, obs_next, dones = to_tensors(batch, device=device)
+        return obs, actions, rewards, obs_next, dones
 
 
 if __name__ == '__main__':
-    import gymnasium as gym
+    import random
+    from lib.utils import measure
+    import numpy as np
 
-    env = gym.make("CartPole-v1", render_mode="rgb_array")
-    replay = PrioritizedReplayBuffer(capacity=20, alpha=.6)
-    print(replay)
-    for ob, action, reward, ob_next, terminated, truncated in play_steps(env, 10, lambda ob: env.action_space.sample()):
-        replay.add(ob, action, reward, ob_next, terminated, truncated)
-    batch_size = 10
-    batch = replay.sample(batch_size)
-    replay.update(torch.rand(batch_size))
-    env.close()
+    capacity = 2**17 # > 100_000
+    A = ReplayBuffer(capacity)
+    B = PrioritizedReplayBuffer(capacity, alpha=.6)
+    C = PrioritizedReplayBufferTree(capacity, alpha=.6)
+    for i in range(capacity):  # Fill capacity
+        exp = dict(
+            ob = i,
+            action = np.random.randint(0, 5),
+            reward = np.random.randint(0, 2),
+            ob_next = i + 1,
+            terminated = np.random.choice([True, False]),
+            truncated = np.random.choice([True, False]),
+        )
+        A.add(**exp)
+        B.add(**exp)
+        C.add(**exp)
+
+    batch_size = 32
+    p = torch.rand(batch_size)
+    indices = random.sample(range(capacity), batch_size)
+    measure('PrioritizedReplayBuffer     | add & sample         ', number=1000, fn=lambda : [A.add(**exp), A.sample(batch_size)] )               # O(1)     + k x O(n)
+    measure('PrioritizedReplayBuffer     | add & sample & update', number=1000, fn=lambda : [B.add(**exp), B.sample(batch_size), B.update(p)] )  # O(1)     + k x O(n)     + k x O(1)
+    measure('PrioritizedReplayBufferTree | add & sample & update', number=1000, fn=lambda : [C.add(**exp), C.sample(batch_size), C.update(p)] )  # O(log n) + k x O(log n) + k x O(log n)
+

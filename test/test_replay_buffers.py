@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from lib.data_structures import SumTree
-from lib.replay_buffers import ReplayBuffer, PrioritizedReplayBuffer
+from lib.replay_buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedReplayBufferTree
 import numpy as np
 
 
@@ -18,11 +18,15 @@ def generate_exp():
         ob = ob_next
 
 
-@pytest.mark.parametrize("capacity", [10, 100, 1_000])
-@pytest.mark.parametrize("batch_size", [1, 10])
-def test_disabled_priorities(capacity, batch_size):
+@pytest.mark.parametrize("capacity", [16, 1024, 2**14])
+@pytest.mark.parametrize("batch_size", [1, 16])
+@pytest.mark.parametrize("use_sumtree", [False, True])
+def test_disabled_priorities(capacity, batch_size, use_sumtree):
     A = ReplayBuffer(capacity)
-    B = PrioritizedReplayBuffer(capacity, alpha=0.)
+    if use_sumtree:
+        B = PrioritizedReplayBufferTree(capacity, alpha=0.)
+    else:
+        B = PrioritizedReplayBuffer(capacity, alpha=0.)
 
     exp_gen = generate_exp()
     for _ in range(capacity + capacity//3):  # Fill beyond capacity
@@ -40,11 +44,15 @@ def test_disabled_priorities(capacity, batch_size):
 
 
 
-@pytest.mark.parametrize("capacity", [10, 100, 1_000])
+@pytest.mark.parametrize("capacity", [16, 1024, 2**14])
 @pytest.mark.parametrize("alpha", [0, .1, .9, .1])
 @pytest.mark.parametrize("batch_size", [1, 10, 99])
-def test_priorities_are_updated(capacity, alpha, batch_size):
-    replay = PrioritizedReplayBuffer(capacity, alpha)
+@pytest.mark.parametrize("use_sumtree", [False, True])
+def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
+    if use_sumtree:
+        replay = PrioritizedReplayBufferTree(capacity, alpha)
+    else:
+        replay = PrioritizedReplayBuffer(capacity, alpha)
 
     # Fill up the buffer (beyond its capacity)
     exp_gen = generate_exp()
@@ -70,9 +78,31 @@ def test_priorities_are_updated(capacity, alpha, batch_size):
     for idx, p_new in no_duplicates.items():
         p = replay.priorities[idx]
         p_expected = (p_new.abs() + replay.eps) ** alpha
-        print(p, p_expected, p_new)
         torch.testing.assert_close(torch.tensor(p), p_expected)
     torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
+
+@pytest.mark.parametrize("capacity", [16, 1024, 2**14])
+@pytest.mark.parametrize("usage", [0.1, 0.6, 1.])
+@pytest.mark.parametrize("use_sumtree", [True, False])
+def test_sampling_is_bounded(capacity, usage, use_sumtree):
+    if use_sumtree:
+        replay = PrioritizedReplayBufferTree(capacity, alpha=.9)
+    else:
+        replay = PrioritizedReplayBuffer(capacity, alpha=.9)
+
+    usage_size = int(usage * capacity)
+
+    # Fill up the buffer partially
+    exp_gen = generate_exp()
+    for i in range(usage_size):
+        ob, action, reward, ob_next, terminated, truncated = next(exp_gen)
+        replay.add(ob, action, reward, ob_next, terminated, truncated)
+    assert len(replay) == usage_size
+
+    replay.sample(batch_size=usage_size)
+    indices = replay._last_sampled
+    assert torch.all(torch.tensor(indices) < usage_size)
+
 
 
 @pytest.mark.parametrize("capacity",    [2, 2**3, 2**10, 2**16])
