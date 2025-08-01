@@ -48,7 +48,7 @@ class SumTree:
         self.capacity = capacity
         self.storage_size = 2 * capacity - 1
         self.first_leaf = self.storage_size - capacity
-        self.nodes = [0.] * self.storage_size
+        self.nodes = [0] * self.storage_size
 
     def get(self, idx):
         return self.nodes[self.first_leaf + idx]
@@ -102,7 +102,16 @@ if __name__ == '__main__':
     import random
     from lib.utils import measure
     from collections import deque
+    from plots import print_binary_tree_array as print_tree
 
+    print('Example sum-tree:')
+    st = SumTree(capacity=32)
+    for i in range(st.capacity - 5):
+        st.update(i, i*10)
+    print_tree(st.nodes)
+
+
+    print('\nMeasure performance:')
     n = 2 ** 17 # > 100_000
     cb = CircularBuffer(capacity=n)   # indexed access is O(1)
     dq = deque(maxlen=n)              # indexed access is O(1) at both ends but slows to O(n) in the middle.

@@ -25,11 +25,13 @@ TARGET_SYNC        = 1_000 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
 
-# Prioritized replay buffer
-REPLAY_SIZE        = 2**14 #10_000
-REPLAY_SIZE_START  = REPLAY_SIZE
-REPLAY_PRIORITY_ALPHA = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
-REPLAY_PRIORITY_BETA  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
+# Prioritized Replay Buffer
+REPLAY_SIZE                   = 2**15 # ~ 32k
+REPLAY_SIZE_START             = REPLAY_SIZE
+REPLAY_PRIORITY_ALPHA         = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
+REPLAY_PRIORITY_BETA_INITIAL  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
+REPLAY_PRIORITY_BETA_FINAL    = 1.0
+REPLAY_PRIORITY_BETA_DURATION = 300_000
 
 
 class DQNAgent(nn.Module):
@@ -74,7 +76,7 @@ class DQNAgent(nn.Module):
 env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
-replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA)
+replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
 writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
 
@@ -96,6 +98,7 @@ ts = time.time()
 while True:
     steps += 1
     agent.eps = torch.tensor(max(EPS_FINAL, EPS_INITIAL - steps / EPS_DURATION))  # linear scheduler
+    replay.beta = min(REPLAY_PRIORITY_BETA_FINAL, REPLAY_PRIORITY_BETA_INITIAL + steps / REPLAY_PRIORITY_BETA_DURATION)
 
     # collect new experience
     ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
@@ -134,6 +137,7 @@ while True:
         writer.add_scalar('Replay buffer/Avg score', replay.stats.avg_score, steps)
         writer.add_scalar('Replay buffer/Avg episode length', replay.stats.avg_episode_length, steps)
         writer.add_scalar('Replay buffer/Best score', replay.stats.best_score, steps)
+        writer.add_scalar('Replay buffer/Beta schedule', replay.beta, steps)
         writer.add_scalar('Train/Mov loss', mov_loss, steps)
         writer.add_scalar('Train/FPS', fps, steps)
         writer.add_scalar('Train/Epsilon', agent.eps, steps)
