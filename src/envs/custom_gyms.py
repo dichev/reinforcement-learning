@@ -2,7 +2,7 @@ from gymnasium.envs.registration import register
 
 register(
     id='custom/FrozenLake_OneHot_DiscountedReward',
-    entry_point='src.envs.FrozenLake_Custom:make__FrozenLake_OneHot_DiscountedReward'
+    entry_point='src.envs.FrozenLake:make__FrozenLake_OneHot_DiscountedReward'
 )
 
 register(
@@ -31,4 +31,9 @@ register(
     id='custom/SpaceInvaders',
     entry_point='src.envs.atari:make_atari',
     kwargs={'id': 'ALE/SpaceInvaders-v5'}
+)
+
+register(
+    id="custom/DoomMaze",
+    entry_point="src.envs.Doom:make_doom"
 )

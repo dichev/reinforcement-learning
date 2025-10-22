@@ -1,6 +1,5 @@
 import gymnasium as gym
 from minigrid.wrappers import ImgObsWrapper, FullyObsWrapper
-from lib.playground import play_episode
 
 
 
@@ -33,6 +32,8 @@ def make__MiniGrid(render_mode=None):
 # Testing only
 if __name__ == '__main__':
     import custom_gyms
+    from lib.playground import play_episode
+
     env = gym.make('custom/MiniGrid', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)

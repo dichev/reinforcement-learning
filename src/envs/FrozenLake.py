@@ -1,6 +1,5 @@
 import gymnasium as gym
 from envs.wrappers import DiscreteOneHotWrapper, DiscountedRewardWrapper
-from lib.playground import play_episode
 
 
 def make__FrozenLake_OneHot_DiscountedReward(render_mode=None, is_slippery=False, gamma=0.99):
@@ -14,6 +13,8 @@ def make__FrozenLake_OneHot_DiscountedReward(render_mode=None, is_slippery=False
 # Testing only
 if __name__ == '__main__':
     import custom_gyms
+    from lib.playground import play_episode
+
     env = gym.make('custom/FrozenLake_OneHot_DiscountedReward', render_mode='human')
     episode = play_episode(env, policy=lambda obs: env.action_space.sample())
     print(episode)
