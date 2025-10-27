@@ -74,6 +74,7 @@ class DQNAgent(nn.Module):
 
 # Define model and tools
 env = gym.make(**ENV_SETTINGS)
+test_env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
@@ -88,7 +89,7 @@ while len(replay) < REPLAY_SIZE_START:
     ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
     replay.add(ob, action, reward, ob_next, terminated, truncated)
     if len(replay) % 1000 == 0: print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
-
+burnin_episodes = replay.stats.episodes
 
 # Training loop
 print(f"Training..")
@@ -97,6 +98,7 @@ steps = 0
 ts = time.time()
 while True:
     steps += 1
+    episode = replay.stats.episodes - burnin_episodes
     agent.eps = torch.tensor(max(EPS_FINAL, EPS_INITIAL - steps / EPS_DURATION))  # linear scheduler
     replay.beta = min(REPLAY_PRIORITY_BETA_FINAL, REPLAY_PRIORITY_BETA_INITIAL + steps / REPLAY_PRIORITY_BETA_DURATION)
 
@@ -133,7 +135,7 @@ while True:
     if steps % LOG_STEP == 0:
         n = LOG_STEP
         fps = n / (time.time() - ts)
-        print(f"#{steps:>4} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats.avg_score:.2f}, best_score={replay.stats.best_score:.2f}, avg_episode_length={replay.stats.avg_episode_length:.2f} | {fps=:.2f} ")
+        print(f"#{steps:>4} {episode=} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats.avg_score:.2f}, best_score={replay.stats.best_score:.2f}, avg_episode_length={replay.stats.avg_episode_length:.2f} | {fps=:.2f} ")
         writer.add_scalar('Replay buffer/Avg score', replay.stats.avg_score, steps)
         writer.add_scalar('Replay buffer/Avg episode length', replay.stats.avg_episode_length, steps)
         writer.add_scalar('Replay buffer/Best score', replay.stats.best_score, steps)
@@ -155,7 +157,7 @@ while True:
 
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
             agent.eps = torch.tensor(EPS_FINAL)
-            score, episode_length, value = evaluate_policy_agent(env, agent, EVAL_NUM_EPISODES, DEVICE)
+            score, episode_length, value = evaluate_policy_agent(test_env, agent, EVAL_NUM_EPISODES, DEVICE)
             print(f"Evaluation: {score=}, {episode_length=}, {value=}")
             writer.add_scalar('Eval/Avg score', score, steps)
             writer.add_scalar('Eval/Avg episode length', episode_length, steps)

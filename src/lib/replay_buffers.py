@@ -11,7 +11,7 @@ class Stats:
         self.avg_score = 0.
         self.best_score = -inf
         self.avg_episode_length = 0
-        self._episodes = 0
+        self.episodes = 0
         self._last_rewards = []
 
     def update(self, reward, terminated, truncated):
@@ -19,9 +19,9 @@ class Stats:
         if terminated or truncated:
             score, length = sum(self._last_rewards), len(self._last_rewards)
             self.best_score = max(score, self.best_score)
-            self.avg_score = (.9 * self.avg_score + .1 * score) if self._episodes else score
-            self.avg_episode_length = (.9 * self.avg_episode_length + .1 * length) if self._episodes else length
-            self._episodes += 1
+            self.avg_score = (.9 * self.avg_score + .1 * score) if self.episodes else score
+            self.avg_episode_length = (.9 * self.avg_episode_length + .1 * length) if self.episodes else length
+            self.episodes += 1
             self._last_rewards.clear()
 
 
