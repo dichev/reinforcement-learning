@@ -19,7 +19,7 @@ class Stats:
         if terminated or truncated:
             score, length = sum(self._last_rewards), len(self._last_rewards)
             self.best_score = max(score, self.best_score)
-            self.avg_score = (.9 * score + .1 * self.avg_score) if self._episodes else score
+            self.avg_score = (.9 * self.avg_score + .1 * score) if self._episodes else score
             self.avg_episode_length = (.9 * self.avg_episode_length + .1 * length) if self._episodes else length
             self._episodes += 1
             self._last_rewards.clear()
