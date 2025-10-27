@@ -63,8 +63,7 @@ class SumTree:
             child = parent
 
     def query(self, r):
-        assert 0 <= r <= self.total_sum
-
+        r = self._safe_range(r)
         i = 0  # root tree index
         while i < self.first_leaf:    # until is not a leaf
             left = 2 * i + 1
@@ -80,6 +79,13 @@ class SumTree:
     def get_data(self):
         leaves = self.nodes[self.first_leaf:]
         return leaves
+
+    def _safe_range(self, r):
+        if not (0 <= r <= self.total_sum):
+            if abs(self.total_sum - r) > 1e-3: # correct minor floating-point precision errors near 0 and total_sum
+                raise ValueError(f'Value {r} is outside the expected range: [0, {self.total_sum}]')
+            r = max(0, min(r, self.total_sum))
+        return r
 
     @property
     def total_sum(self):
