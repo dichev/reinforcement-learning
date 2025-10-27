@@ -106,6 +106,7 @@ class PrioritizedReplayBuffer: # with proportional prioritization
         weights /= weights.max()  # normalize so that they only scale the update downwards
 
         batch = [self.experiences[i] for i in indices]
+        weights = weights.view(batch_size, 1)  # important: reshape to (B,1) to avoid unexpected broadcasting
         return to_tensors(batch, device=device), indices, weights.to(device)
 
     def update(self, indices, priorities):
@@ -148,7 +149,8 @@ class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
         weights /= weights.max()  # normalize so that they only scale the update downwards
 
         batch = [self.experiences[i] for i in indices]
-        return to_tensors(batch, device=device), indices, weights
+        weights = weights.view(batch_size, 1)  # important: reshaping to (B,1) to avoid unexpected broadcasting later
+        return to_tensors(batch, device=device), indices, weights.to(device)
 
 
 if __name__ == '__main__':
