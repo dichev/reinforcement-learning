@@ -33,6 +33,10 @@ REPLAY_PRIORITY_BETA_INITIAL  = 0.4  # β = 0 is no importance sampling, otherwi
 REPLAY_PRIORITY_BETA_FINAL    = 1.0
 REPLAY_PRIORITY_BETA_DURATION = 300_000
 
+# Modes
+DOUBLE_DQN = True   # Remove the maximization bias due to overestimated q values
+
+
 
 class DQNAgent(nn.Module):
     def __init__(self, k_actions, n_frames, eps=EPS_INITIAL):
@@ -78,7 +82,7 @@ test_env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
-writer = SummaryWriter(f'runs/DQN env=Pong {now()}', flush_secs=2)
+writer = SummaryWriter(f'runs/DQN env=Pong pr-buffer double-dqn {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
 
 
@@ -111,13 +115,19 @@ while True:
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
-        Q_next = agent_target(obs_next)
-    R = rewards + (1 - dones) * GAMMA * Q_next.max(dim=-1, keepdim=True)[0]
+        Q_target = agent_target(obs_next)                                 # B, A
+        if DOUBLE_DQN: # decouple action selection from action estimation
+            best_actions = agent(obs_next).argmax(dim=-1, keepdim=True)   # B, 1
+            q_next = Q_target.gather(dim=-1, index=best_actions)          # B, 1
+        else:
+            q_next = Q_target.max(dim=-1, keepdim=True)[0]                # B, 1
+
+    r = rewards + (1 - dones) * GAMMA * q_next                            # B, 1
 
     # update the model
     optimizer.zero_grad()
-    Q_action = agent(obs).gather(dim=-1, index=actions)
-    td_error = Q_action - R.detach()
+    q_action = agent(obs).gather(dim=-1, index=actions)
+    td_error = q_action - r.detach()
     loss = torch.mean(p_weights * (td_error ** 2))
     loss.backward()
     optimizer.step()
@@ -146,8 +156,8 @@ while True:
         if steps == 1000 or steps % (LOG_STEP*100) == 0:
             writer.add_histogram('hist/Rewards', rewards, steps)
             writer.add_histogram('hist/Observations', obs, steps)
-            writer.add_histogram('hist/Returns', R, steps)
-            writer.add_histogram('hist/Errors', R - Q_action, steps)
+            writer.add_histogram('hist/Returns', r, steps)
+            writer.add_histogram('hist/Errors', r - q_action, steps)
             writer.add_histogram('hist/Replay priorities', torch.tensor(replay.priorities.get_data()), steps)
             writer.add_histogram('hist/Replay weights (import sampling)', p_weights, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
