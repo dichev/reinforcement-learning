@@ -21,3 +21,7 @@ def stratified_draws(total, k):
     draws = (torch.arange(k) + torch.rand(k)) * segment
     return draws.clip(0, total)  # ensure there will be no draws outside the range due to rounding errors
 
+
+def random_argmax(arr): # used for tie breaking
+    max_indices = np.flatnonzero(arr == arr.max())
+    return np.random.choice(max_indices)

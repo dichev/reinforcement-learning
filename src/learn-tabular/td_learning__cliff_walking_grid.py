@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import gymnasium as gym
 
+from lib.rng import random_argmax
 
 ENV_NAME   = "CliffWalking-v1"
 GOAL       = -13    # optimal score
@@ -23,11 +24,11 @@ class Agent:
     def policy(self, s):
         if np.random.rand() < self.eps:
             return np.random.randint(self.k_actions)
-        action = self.Q[s,:].argmax()
+        action = random_argmax(self.Q[s,:]) # arg max with tie breaking (since all Q were initialized to 0)
         return action
 
     def get_policy_probs(self, s):
-        best_action = self.Q[s,:].argmax()
+        best_action = random_argmax(self.Q[s,:])
         p = np.full(self.k_actions, self.eps / self.k_actions)
         p[best_action] += 1 - self.eps
         assert np.isclose(p.sum(), 1.)
