@@ -114,6 +114,7 @@ def test_prioritized_replay_importance_sampling(capacity, batch_size, use_sumtre
     probs = priorities / priorities.sum()
     for i, p in enumerate(priorities.tolist()):
         replay.priorities[i] = p
+    probs = probs.view(capacity, 1) # to match the weights tensor
 
     # Sample with importance sampling
     batch, indices, weights = replay.sample(batch_size)
