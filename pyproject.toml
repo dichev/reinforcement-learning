@@ -1,0 +1,35 @@
+[project]
+name = "reinforcment-learning"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "ale-py>=0.11.2",
+    "autorom>=0.6.1", # run: AutoROM --accept-license --install-dir "$(pip show ale-py | grep -i '^Location:' | cut -d' ' -f2-)/ale_py/roms"
+    "einops>=0.8.1",
+    "gymnasium>=1.2.2",
+    "matplotlib>=3.10.7",
+    "minigrid>=3.0.0",
+    "opencv-python>=4.11.0.86",
+    "pandas>=2.3.3",
+    "pytest>=9.0.2",
+    "scipy>=1.16.3",
+    "tensorboard>=2.20.0",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
+    "tqdm>=4.67.1",
+    "vizdoom>=1.2.4",
+    # legacy super-mario-bros stack:
+    "gym-super-mario-bros>=7.4.0",
+    "gym==0.26.2",
+    "numpy<2.0.0",
+]
+
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
