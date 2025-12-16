@@ -767,8 +767,8 @@ wheels = [
 ]
 
 [[package]]
-name = "reinforcment-learning"
-version = "0.1.0"
+name = "reinforcement-learning"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "ale-py" },
@@ -782,7 +782,6 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pandas" },
-    { name = "pytest" },
     { name = "scipy" },
     { name = "tensorboard" },
     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
@@ -792,6 +791,11 @@ dependencies = [
     { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'win32'" },
     { name = "tqdm" },
     { name = "vizdoom" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -807,7 +811,6 @@ requires-dist = [
     { name = "numpy", specifier = "<2.0.0" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pytest", specifier = ">=9.0.2" },
     { name = "scipy", specifier = ">=1.16.3" },
     { name = "tensorboard", specifier = ">=2.20.0" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=2.9.1" },
@@ -817,6 +820,9 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "vizdoom", specifier = ">=1.2.4" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "requests"
