@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
+from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 import envs.custom_gyms
@@ -141,6 +142,7 @@ while True:
     Z_action = Z[batch_rows, actions.squeeze()]
     loss = loss_fn(Z_action, Z_target.detach())
     loss.backward()
+    grad_norm = clip_grad_norm_(agent.parameters(), max_norm=1.)
     optimizer.step()
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
 
