@@ -11,28 +11,29 @@ from lib.playground import play_episode, play_steps, evaluate_policy_agent
 from lib.replay_buffers import PrioritizedReplayBuffer, PrioritizedReplayBufferTree
 from lib.tracking import writer_add_params
 from lib.utils import now
+from models.relational_model import RelationalModel
 
-LOG_NAME           = 'DQN Atari-Pong [pr-buffer double-dqn]'
-ENV_SETTINGS       = dict(id='custom/Pong')
-ENV_GOAL           = 19
+LOG_NAME           = 'DQN-attention MiniGrid [pr-buffer double-dqn]'
+ENV_SETTINGS       = dict(id='custom/MiniGrid')
+ENV_GOAL           = 0.9
 LEARN_RATE         = 0.0001
 GAMMA              = 0.99
 EPS_INITIAL        = 1.0
 EPS_FINAL          = 0.01
-EPS_DURATION       = 150_000
-BATCH_SIZE         = 32   # steps
+EPS_DURATION       = 20_000
+BATCH_SIZE         = 64 # steps
 LOG_STEP           = 100
-TARGET_SYNC        = 1_000 # steps
+TARGET_SYNC        = 100 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
 
 # Prioritized Replay Buffer
-REPLAY_SIZE                   = 2**15 # ~ 32k
+REPLAY_SIZE                   = 2**13 # ~8k
 REPLAY_SIZE_START             = REPLAY_SIZE
 REPLAY_PRIORITY_ALPHA         = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
 REPLAY_PRIORITY_BETA_INITIAL  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
 REPLAY_PRIORITY_BETA_FINAL    = 1.0
-REPLAY_PRIORITY_BETA_DURATION = 300_000
+REPLAY_PRIORITY_BETA_DURATION = 100_000 #
 
 # Modes
 DOUBLE_DQN = True   # Remove the maximization bias due to overestimated q values
@@ -40,22 +41,11 @@ DOUBLE_DQN = True   # Remove the maximization bias due to overestimated q values
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_frames, eps=EPS_INITIAL):
+    def __init__(self, k_actions, input_shape, eps=EPS_INITIAL):
         super().__init__()
-        self.net = nn.Sequential(                                                         # in:  n, 84, 84
-            nn.Conv2d(in_channels=n_frames, out_channels=32, kernel_size=8, stride=4),    # ->  32, 20, 20
-            nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),          # ->  64,  9,  9
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),          # ->  64,  7,  7
-            nn.ReLU(),
-            nn.Flatten(),                                                                 # -> 3136 (flatten)
-            nn.Linear(64 * 7 * 7, 512),                                       # -> 512
-            nn.ReLU(),
-            nn.Linear(512, k_actions)                                          # -> k_actions
-        )
+        self.net = RelationalModel(k_actions, input_shape, with_value_head=False)
         self.k_actions = k_actions
-        self.frames = n_frames
+        self.frames = input_shape[0]
         self.register_buffer('eps', torch.tensor(eps))
 
     def forward(self, state):
@@ -80,7 +70,7 @@ class DQNAgent(nn.Module):
 # Define model and tools
 env = gym.make(**ENV_SETTINGS)
 test_env = gym.make(**ENV_SETTINGS)
-agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
+agent = DQNAgent(env.action_space.n, env.observation_space.shape).to(DEVICE)
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
 writer = SummaryWriter(f'runs/{LOG_NAME} - {now()}', flush_secs=2)
