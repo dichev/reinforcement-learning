@@ -63,7 +63,7 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
     batch, indices, weights = replay.sample(batch_size)
     priorities = torch.randn(batch_size) * 5
     replay.update(indices, priorities)
-    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
+    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), max(priorities.abs().max() ** alpha, torch.tensor(1.)))
 
     no_duplicates = dict()  # sampling is with replacement, but we keep the last priority update only
     for idx, p in zip(indices, priorities):
@@ -72,8 +72,8 @@ def test_priorities_are_updated(capacity, alpha, batch_size, use_sumtree):
     for idx, p_new in no_duplicates.items():
         p = replay.priorities[idx]
         p_expected = (p_new.abs() + replay.eps) ** alpha
-        torch.testing.assert_close(torch.tensor(p), p_expected)
-    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), torch.tensor(max(priorities.abs().max() ** alpha, 1.)))
+        torch.testing.assert_close(torch.as_tensor(p), p_expected)
+    torch.testing.assert_close(torch.tensor(replay._max_seen_priority), max(priorities.abs().max() ** alpha, torch.tensor(1.)))
 
 
 @pytest.mark.parametrize("capacity", [16, 1024, 2**14])

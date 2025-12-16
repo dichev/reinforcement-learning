@@ -3,3 +3,4 @@
 /runs
 *.ignore*
 __pycache__
+*.egg-info/
