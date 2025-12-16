@@ -1,7 +1,5 @@
-import matplotlib.pyplot as plt
 import torch
 from torch import nn, optim
-from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 import envs.custom_gyms
@@ -9,13 +7,11 @@ import gymnasium as gym
 import copy
 import time
 from lib.playground import play_episode, play_steps, evaluate_policy_agent
-from lib.replay_buffers import ReplayBuffer
+from lib.replay_buffers import PrioritizedReplayBuffer, PrioritizedReplayBufferTree
 from lib.tracking import writer_add_params
 from lib.utils import now
-from lib.calc import categorical_projection
-from lib.plots import plot_value_distribution
 
-
+LOG_NAME           = 'DQN Atari-Pong [pr-buffer double-dqn]'
 ENV_SETTINGS       = dict(id='custom/Pong')
 ENV_GOAL           = 19
 LEARN_RATE         = 0.0001
@@ -23,24 +19,28 @@ GAMMA              = 0.99
 EPS_INITIAL        = 1.0
 EPS_FINAL          = 0.01
 EPS_DURATION       = 150_000
-REPLAY_SIZE        = 10_000
-REPLAY_SIZE_START  = 10_000
 BATCH_SIZE         = 32   # steps
 LOG_STEP           = 100
 TARGET_SYNC        = 1_000 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
 
-# Categorical specific:
-SUPPORT_ATOMS      = 51
-SUPPORT_MIN        = -10 # v_min
-SUPPORT_MAX        = 10  # v_max
+# Prioritized Replay Buffer
+REPLAY_SIZE                   = 2**15 # ~ 32k
+REPLAY_SIZE_START             = REPLAY_SIZE
+REPLAY_PRIORITY_ALPHA         = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
+REPLAY_PRIORITY_BETA_INITIAL  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
+REPLAY_PRIORITY_BETA_FINAL    = 1.0
+REPLAY_PRIORITY_BETA_DURATION = 300_000
+
+# Modes
+DOUBLE_DQN = True   # Remove the maximization bias due to overestimated q values
+
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, k_actions, n_frames, support=(SUPPORT_ATOMS, SUPPORT_MIN, SUPPORT_MAX), eps=EPS_INITIAL):
+    def __init__(self, k_actions, n_frames, eps=EPS_INITIAL):
         super().__init__()
-        n_atoms, v_min, v_max = support
         self.net = nn.Sequential(                                                         # in:  n, 84, 84
             nn.Conv2d(in_channels=n_frames, out_channels=32, kernel_size=8, stride=4),    # ->  32, 20, 20
             nn.ReLU(),
@@ -51,27 +51,19 @@ class DQNAgent(nn.Module):
             nn.Flatten(),                                                                 # -> 3136 (flatten)
             nn.Linear(64 * 7 * 7, 512),                                       # -> 512
             nn.ReLU(),
-            nn.Linear(512, k_actions * n_atoms)                                # -> k_actions * n_atoms
+            nn.Linear(512, k_actions)                                          # -> k_actions
         )
         self.k_actions = k_actions
-        self.n_atoms = n_atoms
         self.frames = n_frames
         self.register_buffer('eps', torch.tensor(eps))
-        self.register_buffer('support', torch.linspace(v_min, v_max, n_atoms))
 
     def forward(self, state):
         B, C, H, W = state.shape
-        Z = self.net(state)                           # B, A x S
-        Z = Z.view(B, self.k_actions, self.n_atoms)   # B, A, S
-        return Z
+        return self.net(state)  # B, A
 
     @torch.no_grad()
     def q_values(self, state):
-        B, C, H, W = state.shape
-        Z = self(state)                    # B, A, S
-        Z_probs = F.softmax(Z, dim=-1)     # B, A, S
-        Q = Z_probs @ self.support         # B, A, S @ S   ->   B, A
-        return Q
+        return self(state)
 
     @torch.no_grad()
     def policy(self, state, greedy=False):
@@ -79,22 +71,19 @@ class DQNAgent(nn.Module):
             return torch.randint(self.k_actions, (1,)).item()
 
         C, H, W = state.shape
-        state = torch.tensor(state, dtype=torch.float).view(1, C, H, W).to(DEVICE)  # 1, C, H, W
-        Q = self.q_values(state)
+        state = torch.tensor(state, dtype=torch.float).view(1, C, H, W).to(DEVICE)
+        Q = self(state)
         return Q.argmax(dim=-1).item()
-
 
 
 # Define model and tools
 env = gym.make(**ENV_SETTINGS)
 test_env = gym.make(**ENV_SETTINGS)
 agent = DQNAgent(env.action_space.n, env.observation_space.shape[0]).to(DEVICE)
-loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
-replay = ReplayBuffer(capacity=REPLAY_SIZE)
-writer = SummaryWriter(f'runs/Cat-DQN env=Pong {now()}', flush_secs=2)
+replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
+writer = SummaryWriter(f'runs/{LOG_NAME} - {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
-ACTIONS = env.unwrapped.get_action_meanings()
 
 
 # Initial replay buffer fill
@@ -106,43 +95,46 @@ while len(replay) < REPLAY_SIZE_START:
     if len(replay) % 1000 == 0: print(f"-> Replay buffer size: {len(replay)}/{replay.capacity}")
 burnin_episodes = replay.stats.episodes
 
-
 # Training loop
 print(f"Training..")
 mov_loss = 0
 steps = 0
-batch_rows = torch.arange(BATCH_SIZE)
 ts = time.time()
 while True:
     steps += 1
     episode = replay.stats.episodes - burnin_episodes
     agent.eps = torch.tensor(max(EPS_FINAL, EPS_INITIAL - steps / EPS_DURATION))  # linear scheduler
+    replay.beta = min(REPLAY_PRIORITY_BETA_FINAL, REPLAY_PRIORITY_BETA_INITIAL + steps / REPLAY_PRIORITY_BETA_DURATION)
 
     # collect new experience
     ob, action, reward, ob_next, terminated, truncated = next(exp_iterator)
     replay.add(ob, action, reward, ob_next, terminated, truncated)
 
     # sample batched experiences from the replay buffer
-    obs, actions, rewards, obs_next, dones = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
+    (obs, actions, rewards, obs_next, dones), p_indices, p_weights = replay.sample(batch_size=BATCH_SIZE, device=DEVICE)
 
     # compute future rewards
     with torch.no_grad(): # bootstrap
-        Z_next = agent_target(obs_next)                         #  B, A, S
-        probs = F.softmax(Z_next, dim=-1)                       #  B, A, S
-        best_actions = (probs @ agent.support).argmax(dim=-1)   #  B,
-        best_probs = probs[batch_rows, best_actions]            #  B, S
+        Q_target = agent_target(obs_next)                                 # B, A
+        if DOUBLE_DQN: # decouple action selection from action estimation
+            best_actions = agent(obs_next).argmax(dim=-1, keepdim=True)   # B, 1
+            q_next = Q_target.gather(dim=-1, index=best_actions)          # B, 1
+        else:
+            q_next = Q_target.max(dim=-1, keepdim=True)[0]                # B, 1
 
-        Tz = rewards + (1 - dones) * GAMMA * agent.support                           # Bellman update over the support (atoms)
-        Z_target = categorical_projection(Tz, best_probs, SUPPORT_MIN, SUPPORT_MAX)  # Project the updated distribution onto the fixed support
+    r = rewards + (1 - dones) * GAMMA * q_next                            # B, 1
 
     # update the model
     optimizer.zero_grad()
-    Z = agent(obs)
-    Z_action = Z[batch_rows, actions.squeeze()]
-    loss = loss_fn(Z_action, Z_target.detach())
+    q_action = agent(obs).gather(dim=-1, index=actions)
+    td_error = q_action - r.detach()
+    loss = torch.mean(p_weights * (td_error ** 2))
     loss.backward()
     optimizer.step()
     mov_loss = (.9 * mov_loss + .1 * loss.item()) if steps > 1 else loss.item()
+
+    # update replay priorities
+    replay.update(p_indices, td_error.squeeze().cpu().detach())
 
     # sync target network
     if steps % TARGET_SYNC == 0:
@@ -153,24 +145,25 @@ while True:
     if steps % LOG_STEP == 0:
         n = LOG_STEP
         fps = n / (time.time() - ts)
-        print(f"#{steps:>4} {episode=}  | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats.avg_score:.2f}, best_score={replay.stats.best_score:.2f}, avg_episode_length={replay.stats.avg_episode_length:.2f} | {fps=:.2f} ")
+        print(f"#{steps:>4} {episode=} | {loss=:.6f}, {mov_loss=:.6f}, eps={agent.eps:.4f} | Replay buffer: avg_score={replay.stats.avg_score:.2f}, best_score={replay.stats.best_score:.2f}, avg_episode_length={replay.stats.avg_episode_length:.2f} | {fps=:.2f} ")
         writer.add_scalar('Replay buffer/Avg score', replay.stats.avg_score, steps)
         writer.add_scalar('Replay buffer/Avg episode length', replay.stats.avg_episode_length, steps)
         writer.add_scalar('Replay buffer/Best score', replay.stats.best_score, steps)
+        writer.add_scalar('Replay buffer/Beta schedule', replay.beta, steps)
         writer.add_scalar('Train/Mov loss', mov_loss, steps)
         writer.add_scalar('Train/FPS', fps, steps)
         writer.add_scalar('Train/Epsilon', agent.eps, steps)
         if steps == 1000 or steps % (LOG_STEP*100) == 0:
             writer.add_histogram('hist/Rewards', rewards, steps)
             writer.add_histogram('hist/Observations', obs, steps)
+            writer.add_histogram('hist/Returns', r, steps)
+            writer.add_histogram('hist/Errors', r - q_action, steps)
+            writer.add_histogram('hist/Replay priorities', replay.get_priorities(), steps)
+            writer.add_histogram('hist/Replay weights (import sampling)', p_weights, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
             ob, ob_next = obs.data[0], obs_next.data[0]
             writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)
             writer.add_image("Observations/Before & After (unstacked)", make_grid(torch.cat((ob, ob_next)).unsqueeze(1), nrow=4), steps)
-            fig = plot_value_distribution(obs[0], agent.support, F.softmax(Z[0], dim=-1), ACTIONS, f"Current obs: {ACTIONS[actions[0]]}")
-            writer.add_figure('Values/Cur Observation', fig, steps); plt.close(fig)
-            fig = plot_value_distribution(obs_next[0], agent.support, torch.stack((best_probs[0], Z_target[0])), (ACTIONS[best_actions[0]], ACTIONS[best_actions[0]]+' (proj)'), f"Next obs: Reward={rewards[0].item()}")
-            writer.add_figure('Values/Next Observation', fig, steps); plt.close(fig)
 
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
             agent.eps = torch.tensor(EPS_FINAL)
@@ -186,7 +179,7 @@ while True:
                     'steps': steps,
                     'model': agent.state_dict(),
                     'optimizer': optimizer.state_dict(),
-                }, f'./runs/Categorical-DQN-Pong - {score=:.2f}, {steps=} - {now()}.pt')
+                }, f'./runs/{LOG_NAME} - {score=:.2f}, {steps=} - {now()}.pt')
                 break
 
         ts = time.time()
