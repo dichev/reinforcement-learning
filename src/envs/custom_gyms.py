@@ -7,7 +7,8 @@ register(
 
 register(
     id='custom/MiniGrid',
-    entry_point='src.envs.MiniGrid:make__MiniGrid'
+    entry_point='src.envs.MiniGrid:make__MiniGrid',
+    kwargs={'fully_observable': False}
 )
 
 register(
