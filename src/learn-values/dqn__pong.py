@@ -158,7 +158,7 @@ while True:
             writer.add_histogram('hist/Observations', obs, steps)
             writer.add_histogram('hist/Returns', r, steps)
             writer.add_histogram('hist/Errors', r - q_action, steps)
-            writer.add_histogram('hist/Replay priorities', torch.tensor(replay.priorities.get_data()), steps)
+            writer.add_histogram('hist/Replay priorities', replay.get_priorities(), steps)
             writer.add_histogram('hist/Replay weights (import sampling)', p_weights, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
             ob, ob_next = obs.data[0], obs_next.data[0]

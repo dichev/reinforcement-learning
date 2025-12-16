@@ -115,6 +115,9 @@ class PrioritizedReplayBuffer: # with proportional prioritization
             self.priorities[idx] = priority
             self._max_seen_priority = max(self._max_seen_priority, priority)   # note that ignores the evicted experiences, which will cause the max priority to stale
 
+    def get_priorities(self):
+        return self.priorities
+
     def __iter__(self):
         for i in range(self.size):
             idx = (self.pos + i) % self.capacity if self.size == self.capacity else i
@@ -151,6 +154,9 @@ class PrioritizedReplayBufferTree(PrioritizedReplayBuffer):
         batch = [self.experiences[i] for i in indices]
         weights = weights.view(batch_size, 1)  # important: reshaping to (B,1) to avoid unexpected broadcasting later
         return to_tensors(batch, device=device), indices, weights.to(device)
+
+    def get_priorities(self):
+        return torch.tensor(self.priorities.get_data())
 
 
 if __name__ == '__main__':
