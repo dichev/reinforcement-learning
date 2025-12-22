@@ -12,9 +12,17 @@ register(
 )
 
 register(
-    id='custom/GridWorldGym',
-    entry_point='src.envs.GridWorldGym:GridWorldGym'
+    id='custom/TinyGrid',
+    entry_point='src.envs.TinyGrid:make_TinyGrid',
+    kwargs={'template': 'static_9x6', 'noise': 0}
 )
+
+register(
+    id='custom/TinyRandomGridNoisy',
+    entry_point='src.envs.TinyGrid:make_TinyGrid',
+    kwargs={'template': 'random_4x4', 'noise': 0.01}
+)
+
 
 register(
     id='custom/Pong',
