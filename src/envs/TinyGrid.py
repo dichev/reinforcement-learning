@@ -2,6 +2,8 @@ import random
 import numpy as np
 import gymnasium as gym
 from gymnasium.wrappers import TransformObservation
+
+from envs.wrappers import OneHotWrapper
 from lib.grids import is_reachable
 
 WORLDS = {
@@ -33,7 +35,7 @@ ACTION_MAP = {0: 'up', 1: 'right', 2: 'down', 3: 'left'}
 class TinyGrid(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, grid_template:str|dict, max_steps=None, fully_observable=False, render_mode=None):
+    def __init__(self, grid_template:str|dict, max_steps=None, fully_observable=True, render_mode=None):
         super().__init__()
         self.grid_config = None
         if isinstance(grid_template, dict):
@@ -50,7 +52,7 @@ class TinyGrid(gym.Env):
 
         self.action_space = gym.spaces.Discrete(4)
         if self.fully_observable:
-            self.observation_space = gym.spaces.Box(low=0, high=len(GRID_MAP_INV), shape=(self.rows, self.cols), dtype=np.uint8)
+            self.observation_space = gym.spaces.Box(low=0, high=max(GRID_MAP), shape=(self.rows, self.cols), dtype=np.uint8)
         else:
             self.observation_space = gym.spaces.MultiDiscrete([self.rows, self.cols], dtype=np.uint32)
 
@@ -136,20 +138,19 @@ class TinyGrid(gym.Env):
 
 
 
-def make_TinyGrid(template, noise=0., max_steps=None, fully_observable=False, render_mode=None):
+def make_TinyGrid(template, noise=0., max_steps=None, fully_observable=True, render_mode=None):
     if (grid_template := WORLDS.get(template)) is None:
         raise ValueError(f"Unknown world template '{template}'. Available: {list(WORLDS.keys())}")
 
     env = TinyGrid(grid_template, max_steps, fully_observable, render_mode)
 
     if fully_observable:
-        # Normalize to [0,1] and reshape to (1, H, W)
-        rows, cols = env.observation_space.shape
-        env = TransformObservation(env, lambda obs: obs.astype(np.float32).reshape(1, rows, cols) / max(GRID_MAP), gym.spaces.Box(0., 1., (1, rows, cols)))
+        # Split each cell type into a separate channel (one-hot)
+        env = OneHotWrapper(env, channels=(WALL, LAVA, GOAL, AGENT))   # (cells, rows, cols)
 
         # Add noise
         if noise > 0:
-            env = TransformObservation(env, lambda obs: obs + np.random.rand(rows, cols).astype(np.float32) * noise, gym.spaces.Box(0., 1.+noise, (1, rows, cols)))
+            env = TransformObservation(env, lambda obs: ((1 - noise) * obs + noise * np.random.rand(*obs.shape)).astype(np.float32), env.observation_space)
 
     return env
 
@@ -164,9 +165,8 @@ if __name__ == '__main__':
     env1.step(env1.action_space.sample())
     episode1 = play_episode(env1, lambda s: env1.action_space.sample())
 
-
     # test TinyRandomGrid
-    env2 = gym.make('custom/TinyRandomGridNoisy', fully_observable=True, render_mode='human')
+    env2 = gym.make('custom/TinyRandomGridNoisy', fully_observable=True, render_mode='human', noise=0.1)
     env2.reset()
     env2.step(env2.action_space.sample())
     ob2, _ = env2.reset()

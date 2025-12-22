@@ -91,3 +91,26 @@ class ImageToPyTorch(gym.ObservationWrapper):
 
     def observation(self, observation):
         return np.moveaxis(observation, 2, 0)
+
+
+class OneHotWrapper(gym.ObservationWrapper):
+    """
+    Converts integer observation Box (height, width) into one-hot encoding (channels, height, width).
+    """
+    def __init__(self, env, channels:tuple=None):
+        super().__init__(env)
+        assert isinstance(env.observation_space, gym.spaces.Box), "Observation space must be Box"
+        assert len(env.observation_space.shape) == 2, "Observation must be 2D (height, width)"
+        height, width = self.observation_space.shape
+
+        if channels is None:
+            selected_channels = np.arange(int(self.observation_space.high.max()) + 1)
+        else:
+            selected_channels = np.array(channels)
+
+        self.observation_space = gym.spaces.Box(low=0.0,high=1.0, shape=(len(selected_channels), height, width), dtype=np.float32)
+        self._channels = selected_channels.astype(np.float32).reshape(-1, 1, 1)  # to be broadcasted with (H, W)
+
+    def observation(self, observation):
+        onehot = (observation == self._channels).astype(np.float32) # (C, 1, 1) == (H, W)  ->  (C, H, W)
+        return onehot
