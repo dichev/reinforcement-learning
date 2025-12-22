@@ -25,11 +25,6 @@ register(
 
 
 register(
-    id='custom/GridWorldGym',
-    entry_point='src.envs.GridWorldGym:GridWorldGym'
-)
-
-register(
     id='custom/Pong',
     entry_point='src.envs.atari:make_atari',
     kwargs={'id': 'ALE/Pong-v5'}

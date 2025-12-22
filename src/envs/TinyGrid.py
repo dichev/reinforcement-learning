@@ -88,13 +88,13 @@ class TinyGrid(gym.Env):
             if self.grid[row, col] != WALL:
                 self.pos = (row, col)
 
-        cur = self.grid[self.pos]
+        cur = self.grid[self.pos].item()
         ob = self.get_observation()
         terminated = cur == GOAL or cur == LAVA
         truncated = self.steps >= self.max_steps
-        reward = 0.
-        if   cur == GOAL: reward = 1.0 - 0.9 * (self.steps / self.max_steps)
-        elif cur == LAVA: reward = -1
+        if   cur == GOAL: reward =  10
+        elif cur == LAVA: reward = -10
+        else:             reward = -1
 
         if self.render_mode == 'human':
             self.render(f'Step {self.steps}: {reward=:.2f}')

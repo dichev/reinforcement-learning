@@ -9,7 +9,7 @@ from lib.playground import play_episode, play_steps
 from lib.replay_buffers import ReplayBuffer
 
 EPOCHS = 3000
-ENV_SETTINGS = dict(id='custom/GridWorldGym', size=4, mode='random', max_moves=50, noise=0.01)
+ENV_SETTINGS = dict(id='custom/TinyRandomGridNoisy', max_steps=50, noise=0.01)
 LEARN_RATE = .001
 GAMMA = .9
 EPS_GREEDY = .30
@@ -59,6 +59,9 @@ optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = ReplayBuffer(capacity=REPLAY_SIZE)
 if TARGET_NET_ENABLED:
     agent_target = copy.deepcopy(agent).requires_grad_(False)
+print(agent)
+print(sum(p.numel() for p in agent.parameters()), 'params')
+
 
 # Initial replay buffer fill
 print(f"Initial filling replay buffer:")
