@@ -2,7 +2,6 @@ import torch
 from torch import nn, optim
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.utils import make_grid
 import envs.custom_gyms
 import gymnasium as gym
 import copy
@@ -14,7 +13,7 @@ from lib.utils import now
 from models.relational_model import RelationalModel
 
 LOG_NAME           = 'DQN-attention MiniGrid [pr-buffer double-dqn]'
-ENV_SETTINGS       = dict(id='custom/MiniGrid')
+ENV_SETTINGS       = dict(id='custom/MiniGrid', fully_observable=False)
 ENV_GOAL           = 0.9
 LEARN_RATE         = 0.0001
 GAMMA              = 0.99
@@ -23,12 +22,12 @@ EPS_FINAL          = 0.01
 EPS_DURATION       = 20_000
 BATCH_SIZE         = 64 # steps
 LOG_STEP           = 100
-TARGET_SYNC        = 100 # steps
+TARGET_SYNC        = 1000 # steps
 EVAL_NUM_EPISODES  = 10
 DEVICE             = 'cuda'
 
 # Prioritized Replay Buffer
-REPLAY_SIZE                   = 2**13 # ~8k
+REPLAY_SIZE                   = 2**15 # ~32k
 REPLAY_SIZE_START             = REPLAY_SIZE
 REPLAY_PRIORITY_ALPHA         = 0.6  # α = 0 is uniform sampling, otherwise controls how much prioritization is used
 REPLAY_PRIORITY_BETA_INITIAL  = 0.4  # β = 0 is no importance sampling, otherwise controls how much IS affect learning correction
@@ -75,6 +74,8 @@ optimizer = optim.Adam(params=agent.parameters(), lr=LEARN_RATE)
 replay = PrioritizedReplayBufferTree(REPLAY_SIZE, REPLAY_PRIORITY_ALPHA, REPLAY_PRIORITY_BETA_INITIAL)
 writer = SummaryWriter(f'runs/{LOG_NAME} - {now()}', flush_secs=2)
 agent_target = copy.deepcopy(agent).requires_grad_(False)
+print(agent)
+print(sum(p.numel() for p in agent.parameters()), 'params')
 
 
 # Initial replay buffer fill
@@ -153,9 +154,6 @@ while True:
             writer.add_histogram('hist/Replay priorities', replay.get_priorities(), steps)
             writer.add_histogram('hist/Replay weights (import sampling)', p_weights, steps)
             writer_add_params(writer, agent.net, steps) # without the target_net
-            ob, ob_next = obs.data[0], obs_next.data[0]
-            writer.add_image("Observations/Before & After", make_grid(torch.stack((ob, ob_next)), nrow=4), steps)
-            writer.add_image("Observations/Before & After (unstacked)", make_grid(torch.cat((ob, ob_next)).unsqueeze(1), nrow=4), steps)
 
             print(f"Evaluating the agent over {EVAL_NUM_EPISODES} episodes..")
             agent.eps = torch.tensor(EPS_FINAL)
