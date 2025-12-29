@@ -7,10 +7,10 @@ from envs.wrappers import OneHotWrapper
 from lib.grids import is_reachable
 
 WORLDS = {
-    'static_9x6':"""
+    'dyna_maze_9x6':"""
         . . . . . . . # G
         . . # . . . . # .
-        S . # ~ . . . # .
+        S . # . . . . # .
         . . # . . . . . .
         . . . . . # . . .
         . . . . . . . . .
@@ -31,9 +31,8 @@ GRID_MAP = {
 GRID_MAP_INV = {str_:int_ for int_, str_ in GRID_MAP.items()}
 ACTION_MAP = {0: 'up', 1: 'right', 2: 'down', 3: 'left'}
 
-
 class TinyGrid(gym.Env):
-    metadata = {"render_modes": ["human"]}
+    metadata = {"render_modes": ["human"], "render_fps": 10}
 
     def __init__(self, grid_template:str|dict, max_steps=None, fully_observable=True, render_mode=None):
         super().__init__()
@@ -54,14 +53,15 @@ class TinyGrid(gym.Env):
         if self.fully_observable:
             self.observation_space = gym.spaces.Box(low=0, high=max(GRID_MAP), shape=(self.rows, self.cols), dtype=np.uint8)
         else:
-            self.observation_space = gym.spaces.MultiDiscrete([self.rows, self.cols], dtype=np.uint32)
+            self.observation_space = gym.spaces.Discrete(self.rows * self.cols)
 
     def get_observation(self):
         if self.fully_observable:
             ob = self.grid.copy()
             ob[self.pos] = AGENT
         else:
-            ob = np.array(self.pos, dtype=np.uint32)
+            i, j = self.pos
+            ob = i * self.cols + j
         return ob
 
     def reset(self, **kwargs):
@@ -160,13 +160,13 @@ if __name__ == '__main__':
     from lib.playground import play_episode
 
     # test TinyGrid (static)
-    env1 = gym.make('custom/TinyGrid', fully_observable=True, render_mode='human')
+    env1 = gym.make('custom/TinyGrid', template='dyna_maze_9x6', fully_observable=True, render_mode='human')
     ob1, _ = env1.reset()
     env1.step(env1.action_space.sample())
     episode1 = play_episode(env1, lambda s: env1.action_space.sample())
 
     # test TinyRandomGrid
-    env2 = gym.make('custom/TinyRandomGridNoisy', fully_observable=True, render_mode='human', noise=0.1)
+    env2 = gym.make('custom/TinyGrid', template='random_4x4', noise=0.1, fully_observable=True, render_mode='human')
     env2.reset()
     env2.step(env2.action_space.sample())
     ob2, _ = env2.reset()
