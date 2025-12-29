@@ -22,6 +22,7 @@ python -m learn-policy.reinforce__cart_pole
 
 python -m learn-tabular.q_learning__multi_arm_bandit
 python -m learn-tabular.q_learning__multi_arm_contextual_bandit
+python -m learn-tabular.q_planning__grid
 python -m learn-tabular.td_learning__cliff_walking_grid
 python -m learn-tabular.v_learning__frozen_lake
 ```

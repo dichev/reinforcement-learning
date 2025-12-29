@@ -11,6 +11,10 @@ import random
 
 import envs.custom_gyms
 from lib.rng import random_argmax
+from lib.plots import draw_policy_grid
+from envs.TinyGrid import GRID_MAP, ACTION_ARROWS_MAP
+
+
 
 EPISODES           = 50
 MAX_EPISODE_STEPS  = 2000
@@ -109,3 +113,7 @@ plt.legend()
 plt.show()
 
 
+
+# Draw the learned policies:
+for name, agent in agents.items():
+    draw_policy_grid(agent.Q, env.unwrapped.grid, ACTION_ARROWS_MAP, GRID_MAP, title=f'\nPolicy of {name}')

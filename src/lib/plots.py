@@ -54,6 +54,18 @@ def print_binary_tree_array(tree, max_precision=2, empty_node="•"):
             print("".join(edge_line))
 
 
+def draw_policy_grid(Q, grid, action_map, grid_map, title=''):
+    if title: print(title)
+
+    rows, cols = len(grid), len(grid[0])
+    policy = np.where(Q.min(axis=1) == Q.max(axis=1), -1, Q.argmax(axis=1))
+    policy_grid = policy.reshape(rows, cols)
+    for i in range(rows):
+        line = [action_map[action] if action != -1 else grid_map[cell]
+                for cell, action in zip(grid[i], policy_grid[i])]
+        print(' '.join(line))
+
+
 if __name__ == '__main__':
     print_binary_tree_array(list(range(2**5 - 4)))
     print_binary_tree_array((np.arange(2**5 - 4) + .111).tolist())

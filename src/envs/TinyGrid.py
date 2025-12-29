@@ -30,6 +30,7 @@ GRID_MAP = {
 }
 GRID_MAP_INV = {str_:int_ for int_, str_ in GRID_MAP.items()}
 ACTION_MAP = {0: 'up', 1: 'right', 2: 'down', 3: 'left'}
+ACTION_ARROWS_MAP = { 0: '↑', 1: '→', 2: '↓', 3: '←' }
 
 class TinyGrid(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 10}
