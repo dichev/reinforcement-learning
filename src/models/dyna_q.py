@@ -1,10 +1,12 @@
 """
 Reinforcement Learning, Sutton & Barto, 2018
 [ref 8.1: Dyna Maze] Dyna-Q Planning
+[ref 8.3: Shortcut Maze] Dyna-Q+ Planning with Exploration Bonus
 """
 
 import numpy as np
 import random
+from math import sqrt
 from lib.rng import random_argmax
 
 
@@ -49,3 +51,30 @@ class EnvModel:
         r, s_, term = self.transitions[(s,a)]
         return s, a, r, s_, term
 
+
+class EnvModelPlus: # DynaQ+ with exploration bonus
+    def __init__(self, n_states, n_actions, k=0.001):
+        self.transitions = {} # {(s,a): (r, s_, term, last_visit)}
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.steps = 0
+        self.k = k
+
+    def update(self, s, a, r, s_, term):
+        self.steps += 1
+        self.transitions[(s,a)] = (r, s_, term, self.steps)  # the env is deterministic, so just keep the last seen reward
+
+    def simulated_exp(self):
+        s = random.randrange(self.n_states)
+        a = random.randrange(self.n_actions)
+
+        if (s,a) not in self.transitions: # never visited states are still used in DynaQ+, but they transition to themselves
+            r, s_, term, last_visit = 0.0, s, False, 0
+        else:
+            r, s_, term, last_visit = self.transitions[(s,a)]
+
+        # add exploration bonus
+        t = self.steps - last_visit
+        r_exp = r + self.k * sqrt(t)
+
+        return s, a, r_exp, s_, term
