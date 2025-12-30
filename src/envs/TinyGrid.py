@@ -15,6 +15,22 @@ WORLDS = {
         . . . . . # . . .
         . . . . . . . . .
     """,
+    'shortcut_maze_9x6_A': """
+        . . . . . . . . G
+        . . . . . . . . .
+        . . . . . . . . .
+        . # # # # # # # #
+        . . . . . . . . .
+        . . . S . . . . .
+    """,
+    'shortcut_maze_9x6_B': """
+        . . . . . . . . G
+        . . . . . . . . .
+        . . . . . . . . .
+        . # # # # # # # .
+        . . . . . . . . .
+        . . . S . . . . .
+    """,
     'random_4x4':   dict(rows=4,  cols=4,  n_walls=1, n_lava=1),
     'random_10x10': dict(rows=10, cols=10, n_walls=5, n_lava=6),
 }
@@ -35,13 +51,10 @@ ACTION_ARROWS_MAP = { 0: '↑', 1: '→', 2: '↓', 3: '←' }
 class TinyGrid(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 10}
 
-    def __init__(self, grid_template:str|dict, max_steps=None, fully_observable=True, render_mode=None):
+    def __init__(self, template:str, max_steps=None, fully_observable=True, render_mode=None):
         super().__init__()
-        self.grid_config = None
-        if isinstance(grid_template, dict):
-            self.grid_config = grid_template
-            grid_template = self.generate_random_world(**self.grid_config)
-        self.grid, self.start_pos = self.text_to_grid(grid_template)
+        self.template = template
+        self.grid, self.start_pos = self.template_to_grid(template)
         self.rows, self.cols = self.grid.shape
 
         self.pos = self.start_pos
@@ -56,6 +69,7 @@ class TinyGrid(gym.Env):
         else:
             self.observation_space = gym.spaces.Discrete(self.rows * self.cols)
 
+
     def get_observation(self):
         if self.fully_observable:
             ob = self.grid.copy()
@@ -65,14 +79,14 @@ class TinyGrid(gym.Env):
             ob = i * self.cols + j
         return ob
 
-    def reset(self, **kwargs):
-        if self.grid_config:  # generate a new random grid if the template is not a fixed str
-            grid_template = self.generate_random_world(**self.grid_config)
-            self.grid, self.start_pos = self.text_to_grid(grid_template)
+    def reset(self, options=None, **kwargs):
+        if options and options.get('template'):
+            self.template = options['template']
 
+        self.grid, self.start_pos = self.template_to_grid(self.template)
         self.pos, self.steps = self.start_pos, 0
         if self.render_mode == 'human':
-            self.render('Environment Reset')
+            self.render(f'Environment Reset: {options}')
         return self.get_observation(), {}
 
     def step(self, action):
@@ -101,6 +115,15 @@ class TinyGrid(gym.Env):
             self.render(f'Step {self.steps}: {reward=:.2f}')
 
         return ob, reward, terminated, truncated, {}
+
+    def template_to_grid(self, template:str):
+        if template not in WORLDS: raise ValueError(f"Unknown world template '{template}'. Available: {list(WORLDS.keys())}")
+        text_grid = WORLDS[template]
+        if isinstance(text_grid, dict):
+            text_grid = self.generate_random_world(**WORLDS[template])
+        grid, start_pos = self.text_to_grid(text_grid)
+        return grid, start_pos
+
 
     @staticmethod
     def text_to_grid(grid_template):
@@ -140,10 +163,7 @@ class TinyGrid(gym.Env):
 
 
 def make_TinyGrid(template, noise=0., max_steps=None, fully_observable=True, render_mode=None):
-    if (grid_template := WORLDS.get(template)) is None:
-        raise ValueError(f"Unknown world template '{template}'. Available: {list(WORLDS.keys())}")
-
-    env = TinyGrid(grid_template, max_steps, fully_observable, render_mode)
+    env = TinyGrid(template, max_steps, fully_observable, render_mode)
 
     if fully_observable:
         # Split each cell type into a separate channel (one-hot)
@@ -174,4 +194,7 @@ if __name__ == '__main__':
     env2.step(env2.action_space.sample())
     episode2 = play_episode(env2, lambda s: env2.action_space.sample())
 
-
+    # test grid world change on reset:
+    env3 = gym.make('custom/TinyGrid', template='shortcut_maze_9x6_A', fully_observable=True, render_mode='human')
+    env3.reset(options={'template': 'shortcut_maze_9x6_A'})
+    env3.reset(options={'template': 'shortcut_maze_9x6_B'})
