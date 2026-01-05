@@ -7,13 +7,16 @@ from envs.wrappers import OneHotWrapper
 from lib.grids import is_reachable
 
 WORLDS = {
-    'dyna_maze_9x6':"""
-        . . . . . . . # G
-        . . # . . . . # .
-        S . # . . . . # .
-        . . # . . . . . .
-        . . . . . # . . .
-        . . . . . . . . .
+    'dyna_maze_12x9':"""
+        . . . . . . . # G . . .
+        . . # . . . . # . . . .
+        S . # . . . . # . . . .
+        . . # . . . . . . . . .
+        . . . . . # . . . . . .
+        . . . . . . . . . . . .
+        . . . . . . . . . . . .
+        . . . . . . . . . . . .
+        . . . . . . . . . . . .
     """,
     'shortcut_maze_9x6_A': """
         . . . . . . . . G
@@ -181,7 +184,7 @@ if __name__ == '__main__':
     from lib.playground import play_episode
 
     # test TinyGrid (static)
-    env1 = gym.make('custom/TinyGrid', template='dyna_maze_9x6', fully_observable=True, render_mode='human')
+    env1 = gym.make('custom/TinyGrid', template='dyna_maze_12x9', fully_observable=True, render_mode='human')
     ob1, _ = env1.reset()
     env1.step(env1.action_space.sample())
     episode1 = play_episode(env1, lambda s: env1.action_space.sample())

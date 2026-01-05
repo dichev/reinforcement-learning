@@ -14,7 +14,7 @@ register(
 register(
     id='custom/TinyGrid',
     entry_point='src.envs.TinyGrid:make_TinyGrid',
-    kwargs={'template': 'dyna_maze_9x6', 'noise': 0}
+    kwargs={'template': 'dyna_maze_12x9', 'noise': 0}
 )
 
 register(

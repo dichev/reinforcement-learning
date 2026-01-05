@@ -36,9 +36,10 @@ class DynaQ:
 
 
 class EnvModel:
-    def __init__(self):
+    def __init__(self, on_policy_sampling=False):
         self.transitions = {} # {(s,a): (r, s_, term)}
         self.pool = []        # pool of state-action pairs visited at least once
+        self.on_policy = on_policy_sampling # just a flag
 
     def update(self, s, a, r, s_, term):
         if (s,a) not in self.transitions:
@@ -46,10 +47,17 @@ class EnvModel:
 
         self.transitions[(s,a)] = (r, s_, term)  # the env is deterministic, so just keep the last seen reward
 
-    def simulated_exp(self):
+    def sample(self): # simulated exp
         s, a = random.choice(self.pool)
         r, s_, term = self.transitions[(s,a)]
         return s, a, r, s_, term
+
+    def predict(self, s, a):
+        if (s, a) not in self.transitions:
+            return 0.0, s, False
+        r, s_, term = self.transitions[(s, a)]
+        return r, s_, term
+
 
 
 class EnvModelPlus: # DynaQ+ with exploration bonus
@@ -64,7 +72,7 @@ class EnvModelPlus: # DynaQ+ with exploration bonus
         self.steps += 1
         self.transitions[(s,a)] = (r, s_, term, self.steps)  # the env is deterministic, so just keep the last seen reward
 
-    def simulated_exp(self):
+    def sample(self): # simulated exp
         s = random.randrange(self.n_states)
         a = random.randrange(self.n_actions)
 
@@ -78,3 +86,4 @@ class EnvModelPlus: # DynaQ+ with exploration bonus
         r_exp = r + self.k * sqrt(t)
 
         return s, a, r_exp, s_, term
+

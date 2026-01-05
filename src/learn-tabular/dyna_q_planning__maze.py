@@ -23,20 +23,21 @@ EPSILON                = 0.10
 
 
 # Prepare the env and agents
-env = gym.make('custom/TinyGrid', template='dyna_maze_9x6', fully_observable=False, max_steps=MAX_STEPS_PER_EPISODE)
+env = gym.make('custom/TinyGrid', template='dyna_maze_12x9', fully_observable=False, max_steps=MAX_STEPS_PER_EPISODE)
 env = gym.wrappers.TransformReward(env, lambda r: 1. if r > 0. else 0.)
 n_states, n_actions = env.observation_space.n, env.action_space.n,
 agents = {
     'DynaQ(0)':   DynaQ( 0, n_states, n_actions, EPSILON, ALPHA, GAMMA, env_model=EnvModel()),
     'DynaQ(5)':   DynaQ( 5, n_states, n_actions, EPSILON, ALPHA, GAMMA, env_model=EnvModel()),
     'DynaQ(50)':  DynaQ(50, n_states, n_actions, EPSILON, ALPHA, GAMMA, env_model=EnvModel()),
+    'DynaQ(5) on-policy':  DynaQ(50, n_states, n_actions, EPSILON, ALPHA, GAMMA, env_model=EnvModel(on_policy_sampling=True)),
 }
-
 
 # Learn policies
 history = defaultdict(list)
 for name, agent in agents.items():
     print(f'\n# {name}')
+    start = None
     for episode in range(EPISODES):
         s, _ = env.reset()
         steps =  0
@@ -47,8 +48,15 @@ for name, agent in agents.items():
             agent.update(s, a, r, s_next, bootstrap=not terminated)
             agent.model.update(s, a, r, s_next, terminated)
             for i in range(agent.planning_steps):
-                ss, sa, sr, ss_next, term = agent.model.simulated_exp()
+                if agent.model.on_policy:
+                    if terminated: break
+                    ss = s_next if (i == 0 or term) else ss_next
+                    sa = agent.behavior(ss)
+                    sr, ss_next, term = agent.model.predict(ss, sa)
+                else:
+                    ss, sa, sr, ss_next, term = agent.model.sample()
                 agent.update(ss, sa, sr, ss_next, bootstrap=not term)
+
 
             done = terminated or truncated
             s = s_next

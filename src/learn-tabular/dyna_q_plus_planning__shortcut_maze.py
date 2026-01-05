@@ -49,7 +49,7 @@ for name, agent in agents.items():
             agent.update(s, a, r, s_next, bootstrap=not terminated)
             agent.model.update(s, a, r, s_next, terminated)
             for i in range(agent.planning_steps):
-                ss, sa, sr, ss_next, term = agent.model.simulated_exp()
+                ss, sa, sr, ss_next, term = agent.model.sample()
                 agent.update(ss, sa, sr, ss_next, bootstrap=not term)
 
             done = terminated or truncated
