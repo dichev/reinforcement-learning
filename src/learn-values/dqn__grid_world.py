@@ -9,7 +9,7 @@ from lib.playground import play_episode, play_steps
 from lib.replay_buffers import ReplayBuffer
 
 EPOCHS = 3000
-ENV_SETTINGS = dict(id='custom/TinyRandomGridNoisy', max_steps=50, noise=0.01)
+ENV_SETTINGS = dict(id='custom/TinyGrid', template='random_4x4', max_steps=50, noise=0.01)
 LEARN_RATE = .001
 GAMMA = .9
 EPS_GREEDY = .30

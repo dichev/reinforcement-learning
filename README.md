@@ -20,6 +20,8 @@ python -m learn-policy.cross-entropy-policy__cart_pole
 python -m learn-policy.reinforce_baseline__cart_pole
 python -m learn-policy.reinforce__cart_pole
 
+python -m learn-tabular.dyna_q_planning__maze
+python -m learn-tabular.dyna_q_plus_planning__shortcut_maze
 python -m learn-tabular.q_learning__multi_arm_bandit
 python -m learn-tabular.q_learning__multi_arm_contextual_bandit
 python -m learn-tabular.td_learning__cliff_walking_grid

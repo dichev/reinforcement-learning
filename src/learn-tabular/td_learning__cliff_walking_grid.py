@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import gymnasium as gym
 
+from lib.plots import draw_policy_grid
 from lib.rng import random_argmax
 
 ENV_NAME   = "CliffWalking-v1"
@@ -104,7 +105,6 @@ plt.ylim(-100, 0)
 plt.hlines(GOAL, 0, EPISODES, color="black", linestyles='dashed', label='Optimal')
 plt.legend()
 plt.xlabel('Episodes')
-plt.xlabel('Episode')
 plt.ylabel(f'Score (mov avg)')
 plt.title(f'TD(0) learning over action values (with $\epsilon$-greedy={EPSILON})')
 plt.legend()
@@ -127,3 +127,11 @@ while not done:
     done = terminated or truncated
 env.close()
 
+
+
+# Draw the learned policies:
+ACTION_ARROWS_MAP = { 0: '↑', 1: '→', 2: '↓', 3: '←' }
+GRID_MAP = {0: '.', 1: '#', 2: 'G'}
+grid = np.array([[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,1,1,2]])
+for name, agent in agents.items():
+    draw_policy_grid(agent.Q, grid, ACTION_ARROWS_MAP, GRID_MAP, title=f'\nPolicy of {name}')
