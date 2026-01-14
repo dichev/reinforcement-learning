@@ -17,6 +17,10 @@ dependencies = [
     "torchvision>=0.24.1",
     "tqdm>=4.67.1",
     "vizdoom>=1.2.4",
+    "pettingzoo>=1.25.0",
+    "chess>=1.11.2",
+    "pygame>=2.6.1",
+    "setuptools<71", # to suppress pygame depecated warnings
     # legacy super-mario-bros stack:
     "gym-super-mario-bros>=7.4.0",
     "gym==0.26.2",
