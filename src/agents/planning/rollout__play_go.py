@@ -3,7 +3,7 @@ import time
 import numpy as np
 import pygame
 from collections import defaultdict
-from rollout__worker import Worker
+from agents.planning.rollout__worker import Worker
 
 
 GAME_BOARD_SIZE    = 9 # 19

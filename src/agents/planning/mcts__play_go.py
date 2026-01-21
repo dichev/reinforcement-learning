@@ -3,7 +3,7 @@ import time
 import numpy as np
 import pygame
 import random, math
-from rollout__worker import Worker
+from agents.planning.rollout__worker import Worker
 
 
 GAME_BOARD_SIZE       = 5 # 9 # 19
@@ -149,7 +149,7 @@ class EnvModel:
 if __name__ == '__main__':
     mp.freeze_support()
 
-    from rollout__play_go import RandomAgent, RolloutAgent
+    from agents.planning.rollout__play_go import RandomAgent, RolloutAgent
     from lib.plots import plot_monte_carlo_search_tree
 
     env = make_env(render_mode="human")
